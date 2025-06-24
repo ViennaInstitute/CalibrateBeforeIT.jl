@@ -1,0 +1,16 @@
+name = "Calibration_BeforeIT"
+uuid = "05295df1-6f6a-4591-b1c3-a476c06dd2c5"
+authors = ["Oliver Reiter <reiter@wiiw.ac.at>"]
+version = "0.1.0"
+
+[deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
+QuackIO = "7b8617ff-c43a-4c37-a28b-ad5a1791f8ae"
+
+[compat]
+CSV = "0.10.15"
+DataFrames = "1.7.0"
+Downloads = "1.6.0"
+QuackIO = "0.1.5"

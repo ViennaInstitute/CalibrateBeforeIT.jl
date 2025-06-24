@@ -1,0 +1,66 @@
+id,nace,nace_figaro,regex,description,cpa,regex_4digits
+1,A01,A01,^A01,"Crop and animal production, hunting and related service activities",CPA_A01,^01
+2,A02,A02,^A02,Forestry and logging,CPA_A02,^02
+3,A03,A03,^A03,Fishing and aquaculture,CPA_A03,^03
+4,B,B,^B,Mining and quarrying,CPA_B,^0[5-9]
+5,C10-C12,C10-12,^C1[0-2],"Manufacture of food products, beverages and tobacco products",CPA_C10-12,^1[0-2]
+6,C13-C15,C13-15,^C1[3-5],"Manufacture of textiles, wearing apparel and leather products",CPA_C13-15,^1[3-5]
+7,C16,C16,^C16,"Manufacture of wood and of products of wood and cork, except furniture; manufacture of articles of straw and plaiting materials",CPA_C16,^16
+8,C17,C17,^C17,Manufacture of paper and paper products,CPA_C17,^17
+9,C18,C18,^C18,Printing and reproduction of recorded media,CPA_C18,^18
+10,C19,C19,^C19,Manufacture of coke and refined petroleum products,CPA_C19,^19
+11,C20,C20,^C20,Manufacture of chemicals and chemical products,CPA_C20,^20
+12,C21,C21,^C21,Manufacture of basic pharmaceutical products and pharmaceutical preparations,CPA_C21,^21
+13,C22,C22,^C22,Manufacture of rubber and plastic products,CPA_C22,^22
+14,C23,C23,^C23,Manufacture of other non-metallic mineral products,CPA_C23,^23
+15,C24,C24,^C24,Manufacture of basic metals,CPA_C24,^24
+16,C25,C25,^C25,"Manufacture of fabricated metal products, except machinery and equipment",CPA_C25,^25
+17,C26,C26,^C26,"Manufacture of computer, electronic and optical products",CPA_C26,^26
+18,C27,C27,^C27,Manufacture of electrical equipment,CPA_C27,^27
+19,C28,C28,^C28,Manufacture of machinery and equipment n.e.c.,CPA_C28,^28
+20,C29,C29,^C29,"Manufacture of motor vehicles, trailers and semi-trailers",CPA_C29,^29
+21,C30,C30,^C30,Manufacture of other transport equipment,CPA_C30,^30
+22,C31_C32,C31_32,^C31|^C32,Manufacture of furniture; other manufacturing,CPA_C31_32,^31|^32
+23,C33,C33,^C33,Repair and installation of machinery and equipment,CPA_C33,^33
+24,D,D35,^D35,"Electricity, gas, steam and air conditioning supply",CPA_D,^35
+25,E36,E36,^E36,"Water collection, treatment and supply",CPA_E36,^36
+26,E37-E39,E37-39,^E3[7-9],"Sewerage; waste collection, treatment and disposal activities; materials recovery; remediation activities and other waste management services",CPA_E37-39,^3[7-9]
+27,F,F,^F,Construction,CPA_F,^4[1-3]
+28,G45,G45,^G45,Wholesale and retail trade and repair of motor vehicles and motorcycles,CPA_G45,^45
+29,G46,G46,^G46,"Wholesale trade, except of motor vehicles and motorcycles",CPA_G46,^46
+30,G47,G47,^G47,"Retail trade, except of motor vehicles and motorcycles",CPA_G47,^47
+31,H49,H49,^H49,Land transport and transport via pipelines,CPA_H49,^49
+32,H50,H50,^H50,Water transport,CPA_H50,^50
+33,H51,H51,^H51,Air transport,CPA_H51,^51
+34,H52,H52,^H52,Warehousing and support activities for transportation,CPA_H52,^52
+35,H53,H53,^H53,Postal and courier activities,CPA_H53,^53
+36,I,I,^I,Accommodation and food service activities,CPA_I,^55|^56
+37,J58,J58,^J58,Publishing activities,CPA_J58,^58
+38,J59_J60,J59_60,^J59|^J60,"Motion picture, video and television programme production, sound recording and music publishing activities; programming and broadcasting activities",CPA_J59_60,^59|^60
+39,J61,J61,^J61,Telecommuni-cations,CPA_J61,^61
+40,J62_J63,J62_63,^J62|^J63,"Computer programming, consultancy and related activities; information service activities",CPA_J62_63,^62|^63
+41,K64,K64,^K64,"Financial service activities, except insurance and pension funding",CPA_K64,^64
+42,K65,K65,^K65,"Insurance, reinsurance and pension funding, except compulsory social security",CPA_K65,^65
+43,K66,K66,^K66,Activities auxiliary to financial services and insurance activities,CPA_K66,^66
+44,L68A,LXX,,Imputed rents of owner-occupied dwellings,CPA_L68A,
+45,L,L,^L,Real estate activities excluding imputed rents,CPA_L68B,^68
+46,M69_M70,M69_70,^M69|^M70,Legal and accounting activities; activities of head offices; management consultancy activities,CPA_M69_70,^69|^70
+47,M71,M71,^M71,Architectural and engineering activities; technical testing and analysis,CPA_M71,^71
+48,M72,M72,^M72,Scientific research and development,CPA_M72,^72
+49,M73,M73,^M73,Advertising and market research,CPA_M73,^73
+50,M74_M75,M74_75,^M74|^M75,"Other professional, scientific and technical activities; veterinary activities",CPA_M74_75,^74|^75
+51,N77,N77,^N77,Rental and leasing activities,CPA_N77,^77
+52,N78,N78,^N78,Employment activities,CPA_N78,^78
+53,N79,N79,^N79,"Travel agency, tour operator reservation service and related activities",CPA_N79,^79
+54,N80-N82,N80-82,^N8[0-2],"Security and investigation activities; services to buildings and landscape activities; office administrative, office support and other business support activities",CPA_N80-82,^8[0-2]
+55,O,O84,^O,Public administration and defence; compulsory social security,CPA_O,^84
+56,P,P85,^P,Education,CPA_P,^85
+57,Q86,Q86,^Q86,Human health activities,CPA_Q86,^86
+58,Q87_Q88,Q87_88,^Q87|^Q88,Social work activities,CPA_Q87_88,^87|^88
+59,R90-R92,R90-92,^R9[0-2],"Creative, arts and entertainment activities; libraries, archives, museums and other cultural activities; gambling and betting activities",CPA_R90-92,^9[0-2]
+60,R93,R93,^R93,Sports activities and amusement and recreation activities,CPA_R93,^93
+61,S94,S94,^S94,Activities of membership organisations,CPA_S94,^94
+62,S95,S95,^S95,Repair of computers and personal and household goods,CPA_S95,^95
+63,S96,S96,^S96,Other personal service activities,CPA_S96,^96
+64,T,  T,^T,Activities of households as employers; undifferentiated goods- and services-producing activities of households for own use,CPA_T,^97|^98
+65,U,  U,^U,Activities of extra-territorial organisations and bodies,CPA_U,^99
