@@ -1,0 +1,2 @@
+/data/010_eurostat_tables/*.parquet
+/data/010_eurostat_tables/*.tsv
