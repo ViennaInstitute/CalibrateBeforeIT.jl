@@ -1,12 +1,20 @@
-module Import_Figaro_Data
+# module Import_Figaro_Data
+# export import_figaro_data
+# using DuckDB
+# using DataFrames
+# using Tables
+# using ..Utils
 
-export import_figaro_data
+function pqf(save_path, table_id)
+    joinpath(save_path, "$(table_id).parquet")
+end
 
-using DuckDB, DataFrames, Tables
 
-function import_figaro_data(geo, all_years, number_sectors, number_years)
+function import_figaro_data(geo, save_path,
+                            all_years, number_sectors, number_years)
     conn = DBInterface.connect(DuckDB.DB)
     years_str = join(["'$(year)'" for year in all_years], ", ")
+    sp = save_path
 
     figaro = Dict()
 
@@ -15,48 +23,48 @@ function import_figaro_data(geo, all_years, number_sectors, number_years)
     # figaro.intermediate_consumption=fetch(conn,sqlquery,'DataReturnFormat','numeric');
     # figaro.intermediate_consumption=reshape(figaro.intermediate_consumption,number_sectors,number_sectors,number_years);
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND ind_use IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_use, ind_ava ORDER BY time, ind_use, ind_ava";
+    sqlquery="SELECT sum(value) FROM '$(pqf(sp, "naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqf(sp, "nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND ind_use IN (SELECT nace_figaro FROM '$(pqf(sp, "nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_use, ind_ava ORDER BY time, ind_use, ind_ava";
     figaro["intermediate_consumption"]=execute(conn,sqlquery, (number_sectors, number_sectors, number_years));
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND ind_use IN ('P3_S14', 'P3_S15') AND time IN ($(years_str)) GROUP BY time, ind_ava ORDER BY time, ind_ava";
+    sqlquery="SELECT sum(value) FROM '$(pqf(sp, "naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqf(sp, "nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND ind_use IN ('P3_S14', 'P3_S15') AND time IN ($(years_str)) GROUP BY time, ind_ava ORDER BY time, ind_ava";
     figaro["household_consumption"]=execute(conn,sqlquery, (number_sectors,number_years));
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND ind_use='P51G' AND time IN ($(years_str)) GROUP BY time, ind_ava ORDER BY time, ind_ava";
+    sqlquery="SELECT sum(value) FROM '$(pqf(sp, "naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqf(sp, "nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND ind_use='P51G' AND time IN ($(years_str)) GROUP BY time, ind_ava ORDER BY time, ind_ava";
     figaro["fixed_capitalformation"]=execute(conn,sqlquery, (number_sectors,number_years));
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND ind_use='P5M' AND time IN ($(years_str)) GROUP BY time, ind_ava ORDER BY time, ind_ava";
+    sqlquery="SELECT sum(value) FROM '$(pqf(sp, "naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqf(sp, "nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND ind_use='P5M' AND time IN ($(years_str)) GROUP BY time, ind_ava ORDER BY time, ind_ava";
     figaro["inventory_changes"]=execute(conn,sqlquery, (number_sectors,number_years));
 
     figaro["capitalformation"]=figaro["fixed_capitalformation"]+figaro["inventory_changes"];
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_orig!='$(geo)' and c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_ava ORDER BY time, ind_ava";
+    sqlquery="SELECT sum(value) FROM '$(pqf(sp, "naio_10_fcp_ii"))' WHERE c_orig!='$(geo)' and c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqf(sp, "nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_ava ORDER BY time, ind_ava";
     figaro["imports"]=execute(conn,sqlquery, (number_sectors,number_years));
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_orig='$(geo)' and c_dest!='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_ava ORDER BY time, ind_ava";
+    sqlquery="SELECT sum(value) FROM '$(pqf(sp, "naio_10_fcp_ii"))' WHERE c_orig='$(geo)' and c_dest!='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqf(sp, "nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_ava ORDER BY time, ind_ava";
     figaro["exports"]=execute(conn,sqlquery, (number_sectors,number_years));
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND ind_use='P3_S13' AND time IN ($(years_str)) GROUP BY time, ind_ava ORDER BY time, ind_ava";
+    sqlquery="SELECT sum(value) FROM '$(pqf(sp, "naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqf(sp, "nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND ind_use='P3_S13' AND time IN ($(years_str)) GROUP BY time, ind_ava ORDER BY time, ind_ava";
     figaro["government_consumption"]=execute(conn,sqlquery, (number_sectors,number_years));
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava='B2A3G' AND ind_use IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_use ORDER BY time, ind_use";
+    sqlquery="SELECT sum(value) FROM '$(pqf(sp, "naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava='B2A3G' AND ind_use IN (SELECT nace_figaro FROM '$(pqf(sp, "nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_use ORDER BY time, ind_use";
     figaro["operating_surplus"]=execute(conn,sqlquery, (number_sectors,number_years));
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava='D1' AND ind_use IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_use ORDER BY time, ind_use";
+    sqlquery="SELECT sum(value) FROM '$(pqf(sp, "naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava='D1' AND ind_use IN (SELECT nace_figaro FROM '$(pqf(sp, "nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_use ORDER BY time, ind_use";
     figaro["compensation_employees"]=execute(conn,sqlquery, (number_sectors,number_years));
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava='D29X39' AND ind_use IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_use ORDER BY time, ind_use";
+    sqlquery="SELECT sum(value) FROM '$(pqf(sp, "naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava='D29X39' AND ind_use IN (SELECT nace_figaro FROM '$(pqf(sp, "nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_use ORDER BY time, ind_use";
     figaro["taxes_production"]=execute(conn,sqlquery, (number_sectors,number_years));
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava='D21X31' AND ind_use IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_use ORDER BY time, ind_use";
+    sqlquery="SELECT sum(value) FROM '$(pqf(sp, "naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava='D21X31' AND ind_use IN (SELECT nace_figaro FROM '$(pqf(sp, "nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_use ORDER BY time, ind_use";
     figaro["taxes_products"]=execute(conn,sqlquery, (number_sectors,number_years));
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_use IN ('P3_S14','P3_S15') AND ind_ava='D21X31' AND time IN ($(years_str)) GROUP BY time ORDER BY time";
+    sqlquery="SELECT sum(value) FROM '$(pqf(sp, "naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_use IN ('P3_S14','P3_S15') AND ind_ava='D21X31' AND time IN ($(years_str)) GROUP BY time ORDER BY time";
     figaro["taxes_products_household"]=execute(conn,sqlquery);
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_use IN ('P51G','P5M') AND ind_ava='D21X31' AND time IN ($(years_str)) GROUP BY time ORDER BY time";
+    sqlquery="SELECT sum(value) FROM '$(pqf(sp, "naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_use IN ('P51G','P5M') AND ind_ava='D21X31' AND time IN ($(years_str)) GROUP BY time ORDER BY time";
     figaro["taxes_products_capitalformation"]=execute(conn,sqlquery);
 
-    sqlquery="SELECT value FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_use='P3_S13' AND ind_ava='D21X31' AND time IN ($(years_str)) ORDER BY time";
+    sqlquery="SELECT value FROM '$(pqf(sp, "naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_use='P3_S13' AND ind_ava='D21X31' AND time IN ($(years_str)) ORDER BY time";
     figaro["taxes_products_government"]=execute(conn,sqlquery);
 
     # figaro["taxes_products_export"]=zeros(size(figaro["taxes_products_household"]));
@@ -76,4 +84,4 @@ function import_figaro_data(geo, all_years, number_sectors, number_years)
 end
 
 
-end
+# end

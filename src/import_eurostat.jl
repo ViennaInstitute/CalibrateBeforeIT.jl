@@ -1,8 +1,10 @@
-module Import_Eurostat
+# module Import_Eurostat
+# export remove_flags_parse_to_float, transform_columns, download_to_parquet
+# using CSV
+# using DataFrames
+# using Downloads
+# using QuackIO
 
-export remove_flags_parse_to_float, transform_columns, download_to_parquet
-
-using CSV, DataFrames, Downloads, QuackIO
 
 # Function to process each element, remove Eurostat flags and try to convert it
 # to Float64
@@ -37,10 +39,12 @@ end
 
 # table_id = "irt_st_a"
 # save_path = "../data/010_eurostat_tables"
-function download_to_parquet(table_id, save_path)
+function download_to_parquet(table_id, save_path; use_cached_tsv = false)
     url = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/$(table_id)/?format=TSV&compressed=false"
     tsv_filename = joinpath(save_path, "$(table_id).tsv")
-    http_response = Downloads.download(url, tsv_filename)
+    if use_cached_tsv == false
+        http_response = Downloads.download(url, tsv_filename)
+    end
 
     raw_table = CSV.read(tsv_filename, DataFrame;
                          delim = "\t",
@@ -85,5 +89,4 @@ function download_to_parquet(table_id, save_path)
                 long_table, format = :parquet)
 end
 
-
-    end
+# end

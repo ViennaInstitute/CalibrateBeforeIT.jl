@@ -1,8 +1,6 @@
-module Utils
-
-export pqfile, execute
-
-using DuckDB, Tables
+# module Utils
+# export pqfile, execute
+# using DuckDB, Tables
 
 function pqfile(table_id)
     joinpath(save_path, "$(table_id).parquet")
@@ -20,4 +18,4 @@ function execute(conn, query, dims)
 end
 
 
-end
+# end
