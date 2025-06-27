@@ -62,37 +62,40 @@ ctry_calibration_data = import_calibration_data(geo,
 ##------------------------------------------------------------
 ## Step 7: "Import EA data"
 
-## OR: seems to be the same as import_data(), but with geo == "EA19". TODO check
+## This step does the same queries as step 5 with import_data(), but with geo ==
+## "EA19". Only difference is that with EA19, unemployment rates are not used
+ea_data = import_data("EA19", start_year, end_year)
 
 
-# ##------------------------------------------------------------
-# ## Step 8: Calculate the initial conditions and parameters
 
-# ## NOTE: code does not run yet
+##------------------------------------------------------------
+## Step 8: Calculate the initial conditions and parameters
 
-# ## Save calibration data into such a struct
-# using Dates
-# struct CalibrationData
-#     calibration::Dict{String, Any}
-#     figaro::Dict{String, Any}
-#     data::Dict{String, Any}
-#     ea::Dict{String, Any}
-#     max_calibration_date::DateTime
-#     estimation_date::DateTime
-# end
+## NOTE: code does not run yet
 
-# calibration_date = DateTime(start_year, 03, 31);
-# max_calibration_date = DateTime(2020, 12, 31)
-# estimation_date = DateTime(1996, 12, 31)
+## Save calibration data into such a struct
+using Dates
+struct CalibrationData
+    calibration::Dict{String, Any}
+    figaro::Dict{String, Any}
+    data::Dict{String, Any}
+    ea::Dict{String, Any}
+    max_calibration_date::DateTime
+    estimation_date::DateTime
+end
 
-# country_calibration = CalibrationData(
-#     ctry_calibration_data,
-#     ctry_figaro,
-#     ctry_data,
-#     ea, ## OR: is not computed yet
-#     max_calibration_date, estimation_date)
+calibration_date = DateTime(start_year, 03, 31);
+max_calibration_date = DateTime(2020, 12, 31)
+estimation_date = DateTime(1996, 12, 31)
 
-# using BeforeIT
-# parameters, initial_conditions =
-#     BeforeIT.get_params_and_initial_conditions(country_calibration,
-#                                                calibration_date; scale = 1/10000);
+country_calibration = CalibrationData(
+    ctry_calibration_data,
+    ctry_figaro,
+    ctry_data,
+    ea_data,
+    max_calibration_date, estimation_date)
+
+using BeforeIT
+parameters, initial_conditions =
+    BeforeIT.get_params_and_initial_conditions(country_calibration,
+                                               calibration_date; scale = 1/10000);
