@@ -1,6 +1,7 @@
 
 
-function import_calibration_data(geo, start_calibration_year, end_calibration_year)
+function import_calibration_data(geo, start_calibration_year, end_calibration_year,
+                                 number_sectors)
     conn = DBInterface.connect(DuckDB.DB)
 
     all_years = collect(start_calibration_year:end_calibration_year)
@@ -169,9 +170,8 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
 
     sqlquery="SELECT 1e3*value FROM '$(pqfile("nama_10_a64_e"))' WHERE nace_r2 IN (SELECT nace FROM '$(pqfile("nace64"))') and time IN ($(years_str)) AND geo='$(geo)' AND nace_r2 NOT IN ('T', 'U', 'L68A') AND unit = 'THS_PER' AND na_item='SAL_DC' ORDER BY time, nace_r2"
     calibration_data["employees"]=execute(conn,sqlquery);
-    calibration_data["employees"]=reshape(calibration_data["employees"],(62,Int64(length(calibration_data["employees"])/62)));
-    # TODO fillmissing in Julia?
-    # calibration_data["employees"]=fillmissing(calibration_data["employees"],'constant',100);
+    calibration_data["employees"]=reshape(calibration_data["employees"],(number_sectors,Int64(length(calibration_data["employees"])/number_sectors)));
+    calibration_data["employees"]=coalesce.(calibration_data["employees"],100);
 
     ## TODO fix: sbs_na_sca_a64 file not found
     # sqlquery="SELECT value FROM (" *
