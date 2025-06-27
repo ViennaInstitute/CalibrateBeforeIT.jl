@@ -420,15 +420,24 @@ function import_data(geo, start_year, end_year)
     data["employed_quarterly"]=execute(conn,sqlquery);
 
 
-    ## Unemployment rate
-    # sqlquery="SELECT value FROM '$(pqfile("une_rt_q_h"))' WHERE time IN ($(quarters_str)) AND geo='$(geo)' AND unit='PC_ACT' AND age='Y15-74' AND s_adj='SA' AND sex='T' ORDER BY time"
-    sqlquery="SELECT value FROM '$(pqfile("une_rt_q"))' WHERE time IN ($(quarters_str)) AND geo='$(geo)' AND unit='PC_ACT' AND age='Y15-74' AND s_adj='SA' AND sex='T' ORDER BY time"
-    data["unemployment_rate_quarterly"]=0.01*execute(conn,sqlquery);
+    if geo != "EA19"
+        ## Unemployment rate
+        # sqlquery="SELECT value FROM '$(pqfile("une_rt_q_h"))' WHERE time IN ($(quarters_str)) AND geo='$(geo)' AND unit='PC_ACT' AND age='Y15-74' AND s_adj='SA' AND sex='T' ORDER BY time"
+        sqlquery="SELECT value FROM '$(pqfile("une_rt_q"))' WHERE time IN ($(quarters_str)) AND geo='$(geo)' AND unit='PC_ACT' AND age='Y15-74' AND s_adj='SA' AND sex='T' ORDER BY time"
+        data["unemployment_rate_quarterly"]=0.01*execute(conn,sqlquery);
+        ## TODO check and fix: for IE, quarterly rate is always missing ...
 
-    # Annual
-    # sqlquery="SELECT value FROM '$(pqfile("une_rt_a_h"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND unit='PC_ACT' AND age='Y15-74' AND sex='T' ORDER BY time"
-    sqlquery="SELECT value FROM '$(pqfile("une_rt_a"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND unit='PC_ACT' AND age='Y15-74' AND sex='T' ORDER BY time"
-    data["unemployment_rate"]=0.01*execute(conn,sqlquery);
+        # Annual
+        # sqlquery="SELECT value FROM '$(pqfile("une_rt_a_h"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND unit='PC_ACT' AND age='Y15-74' AND sex='T' ORDER BY time"
+        sqlquery="SELECT value FROM '$(pqfile("une_rt_a"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND unit='PC_ACT' AND age='Y15-74' AND sex='T' ORDER BY time"
+        data["unemployment_rate"]=0.01*execute(conn,sqlquery);
+
+        # Pad the unemployment rate series to the number of years/quarters
+        data["unemployment_rate"]=[repeat([missing], (number_years - length(data["unemployment_rate"])))...,
+                                   data["unemployment_rate"]...];
+        data["unemployment_rate_quarterly"]=[repeat([missing], (number_quarters - length(data["unemployment_rate_quarterly"])))...,
+                                             data["unemployment_rate_quarterly"]...];
+    end
 
 
     ## Sectoral GVA
@@ -491,10 +500,6 @@ function import_data(geo, start_year, end_year)
     #         eval(['data.',fields{l},'=[NaN*zeros(1,size(data.',fields{l},',2));data.',fields{l},"']);
     #     end
     # end
-
-    # TODO
-    # data["unemployment_rate"]=[NaN(length(data["years_num"])-length(data["unemployment_rate"]),1);data["unemployment_rate"]];
-    # data["unemployment_rate_quarterly"]=[NaN(length(data["quarters_num"])-length(data["unemployment_rate_quarterly"]),1);data["unemployment_rate_quarterly"]];
 
     return data
 
