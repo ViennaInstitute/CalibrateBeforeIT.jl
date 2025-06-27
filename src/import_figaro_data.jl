@@ -76,9 +76,9 @@ function import_figaro_data(geo, save_path,
     # figaro["operating_surplus"]=figaro["operating_surplus"]-figaro["capital_consumption"];
 
     if geo=="IE"
-        figaro["compensation_employees"][3,:]=interp1(3:number_years,figaro["compensation_employees"][3,3:number_years],1:number_years,"linear","extrap");
-        figaro["compensation_employees"][57,:]=interp1(3:number_years,figaro["compensation_employees"][57,3:number_years],1:number_years,"linear","extrap");
-        # figaro["compensation_employees"][10,:]=interp1([1 2 3 4 6 7],figaro["compensation_employees"][10,[1 2 3 4 6 7]],1:7,'linear','extrap');
+        figaro["compensation_employees"][3,:]=linear_interp_extrap(3:number_years,figaro["compensation_employees"][3,3:number_years],1:number_years);
+        figaro["compensation_employees"][57,:]=linear_interp_extrap(3:number_years,figaro["compensation_employees"][57,3:number_years],1:number_years);
+        # figaro["compensation_employees"][10,:]=linear_interp_extrap([1 2 3 4 6 7],figaro["compensation_employees"][10,[1 2 3 4 6 7]],1:7);
     end
     return figaro
 end
