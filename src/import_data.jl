@@ -10,7 +10,7 @@ function import_data(geo, start_year, end_year)
     ## Create a year-quarter vector and string for creating a data.frame and for SQL
     ## queries
     all_quarters = ["Q1", "Q2", "Q3", "Q4"]
-    quarters_vec = ["$(year)$(quarter)" for year in all_years for quarter in all_quarters]
+    quarters_vec = ["$(year)-$(quarter)" for year in all_years for quarter in all_quarters]
     quarters_str = join(["'$(yearquarter)'" for yearquarter in quarters_vec], ",")
 
     data = Dict()
@@ -425,7 +425,6 @@ function import_data(geo, start_year, end_year)
         # sqlquery="SELECT value FROM '$(pqfile("une_rt_q_h"))' WHERE time IN ($(quarters_str)) AND geo='$(geo)' AND unit='PC_ACT' AND age='Y15-74' AND s_adj='SA' AND sex='T' ORDER BY time"
         sqlquery="SELECT value FROM '$(pqfile("une_rt_q"))' WHERE time IN ($(quarters_str)) AND geo='$(geo)' AND unit='PC_ACT' AND age='Y15-74' AND s_adj='SA' AND sex='T' ORDER BY time"
         data["unemployment_rate_quarterly"]=0.01*execute(conn,sqlquery);
-        ## TODO check and fix: for IE, quarterly rate is always missing ...
 
         # Annual
         # sqlquery="SELECT value FROM '$(pqfile("une_rt_a_h"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND unit='PC_ACT' AND age='Y15-74' AND sex='T' ORDER BY time"
@@ -485,8 +484,7 @@ function import_data(geo, start_year, end_year)
     data["nace10_gva_deflator_growth_quarterly"]=0.01*execute(conn,sqlquery);
     data["nace10_gva_deflator_growth_quarterly"]=reshape(data["nace10_gva_deflator_growth_quarterly"],(Int64(length(data["nace10_gva_deflator_growth_quarterly"])/10),10));
 
-    # ## TODO fix: matrices are empty
-    # data["nominal_nace10_gva_growth_quarterly"]=data["real_nace10_gva_growth_quarterly"]+data["nace10_gva_deflator_growth_quarterly"];
+    data["nominal_nace10_gva_growth_quarterly"]=data["real_nace10_gva_growth_quarterly"]+data["nace10_gva_deflator_growth_quarterly"];
 
     ##
     ## Adjust length of time series
