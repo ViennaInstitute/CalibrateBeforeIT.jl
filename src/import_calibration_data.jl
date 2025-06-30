@@ -1,7 +1,7 @@
 
 
 function import_calibration_data(geo, start_calibration_year, end_calibration_year,
-                                 number_sectors)
+                                 number_sectors, figaro)
     conn = DBInterface.connect(DuckDB.DB)
 
     all_years = collect(start_calibration_year:end_calibration_year)
@@ -177,18 +177,23 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     calibration_data["employees"]=reshape(calibration_data["employees"],(number_sectors,Int64(length(calibration_data["employees"])/number_sectors)));
     calibration_data["employees"]=coalesce.(calibration_data["employees"],100);
 
-    ## TODO fix: sbs_na_sca_a64 file not found
-    # sqlquery="SELECT value FROM (" *
-    #           "SELECT time, nace_r2, value AS value FROM '$(pqfile("sbs_na_sca_a64"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND indic_sb='V11110' AND nace_r2 NOT IN ('K64','K65','K66','P','Q86','Q87_Q88','R90-R92','R93','S94','S95','S96') " *
-    #           "UNION " *
-    #           "SELECT time, nace_r2, value AS value FROM '$(pqfile("bd_9ac_l_form_a64"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND indic_sb='V11910' AND leg_form='TOTAL' AND nace_r2 IN ('K64','K65','K66','P','Q86','Q87_Q88','R90-R92','R93','S94','S95','S96')" *
-    #           ") foo ORDER BY time, nace_r2"
-    # #     'UNION " ...
-    # #     'SELECT time, nace_r2, 1e2*value AS value FROM '$(pqfile("nama_10_a64_e"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND unit = 'THS_PER' AND na_item='SAL_DC' AND nace_r2 IN ('A01','A02','A03','O') " ...
-    # calibration_data["firms"]=execute(conn,sqlquery);
-    # calibration_data["firms"]=reshape(calibration_data["firms"],62,length(calibration_data["firms"])/62);
-    # calibration_data["firms"](isnan(calibration_data["firms"]))=round(calibration_data["employees"](isnan(calibration_data["firms"]))/10);
+    ## NOTE sbs_na_sca_r2 is only up until 2020.
 
+    ## TODO check which data sources could be used to extend the timeframe
+
+    sqlquery="SELECT value FROM (" *
+              "SELECT time, nace_r2, value AS value FROM '$(pqfile("sbs_na_sca_a64"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND indic_sb='V11110' AND nace_r2 NOT IN ('K64','K65','K66','P','Q86','Q87_Q88','R90-R92','R93','S94','S95','S96') " *
+              "UNION " *
+              "SELECT time, nace_r2, value AS value FROM '$(pqfile("bd_9ac_l_form_a64"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND indic_sb='V11910' AND leg_form='TOTAL' AND nace_r2 IN ('K64','K65','K66','P','Q86','Q87_Q88','R90-R92','R93','S94','S95','S96')" *
+              ") foo ORDER BY time, nace_r2"
+    #     'UNION " ...
+    #     'SELECT time, nace_r2, 1e2*value AS value FROM '$(pqfile("nama_10_a64_e"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND unit = 'THS_PER' AND na_item='SAL_DC' AND nace_r2 IN ('A01','A02','A03','O') " ...
+    x1=execute(conn,sqlquery);
+    calibration_data["firms"]=execute(conn,sqlquery);
+    calibration_data["firms"]=reshape(calibration_data["firms"],(number_sectors,Int64(length(calibration_data["firms"])/number_sectors)));
+    calibration_data["firms"][ismissing.(calibration_data["firms"])]=round.(calibration_data["employees"][:, 1:11][ismissing.(calibration_data["firms"])]/10);
+
+    ## TODO there should be a better way to fix this:
     if geo=="BE"
         calibration_data["firms"][10,6]=10;
     end
@@ -199,24 +204,20 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
         calibration_data["capital_taxes"][6:7]=0;
     end
 
-    # ## TODO fix: load needed figaro data and check 'squeeze' function in Matlab
-    # load("../data/020_figaro_data/',char(geos(g)),'.mat'],'figaro');
-    # # output=squeeze(sum(figaro.intermediate_consumption))+figaro.taxes_products+figaro.taxes_production+figaro.compensation_employees+figaro.operating_surplus;#+capital_consumption;
-    # if geo in ["FR", "IE", "LT", "LU", "MT", "PL", "SE"]
-    #     calibration_data["capital_consumption"]=calibration_data["capital_consumption"]'.*(calibration_data["nace64_capital_consumption_eu20"]./calibration_data["nominal_nace64_output_eu20"].*output)./sum(calibration_data["nace64_capital_consumption_eu20"]./calibration_data["nominal_nace64_output_eu20"].*output);
-    # else
-    #     calibration_data["capital_consumption"]=calibration_data["nace64_capital_consumption"]./calibration_data["nominal_nace64_output"].*output;
-    # end
+    output=dropdims(sum(figaro["intermediate_consumption"], dims=1), dims=1)+figaro["taxes_products"]+figaro["taxes_production"]+figaro["compensation_employees"]+figaro["operating_surplus"];#+capital_consumption;
+    if geo in ["FR", "IE", "LT", "LU", "MT", "PL", "SE"]
+        calibration_data["capital_consumption"]=calibration_data["capital_consumption"]'.*(calibration_data["nace64_capital_consumption_eu20"]./calibration_data["nominal_nace64_output_eu20"].*output)./sum(calibration_data["nace64_capital_consumption_eu20"]./calibration_data["nominal_nace64_output_eu20"].*output);
+    else
+        calibration_data["capital_consumption"]=calibration_data["nace64_capital_consumption"]./calibration_data["nominal_nace64_output"].*output;
+    end
 
-    # if !(geo in ["AT", "CZ", "EL", "FI", "LV", "SK"])  # OR [2025-05-06 Di]: removed DK
-    #     fixed_assets_other_than_dwellings=(calibration_data["fixed_assets"]-calibration_data["dwellings"])'.*((calibration_data["fixed_assets_eu7"]-calibration_data["dwellings_eu7"])./calibration_data["nominal_nace64_output_eu7"].*output)./sum((calibration_data["fixed_assets_eu7"]-calibration_data["dwellings_eu7"])./calibration_data["nominal_nace64_output_eu7"].*output);
-    #     dwellings=zeros(size(fixed_assets_other_than_dwellings));
-    #     dwellings[44,:]=calibration_data["dwellings"];
-    #     calibration_data["fixed_assets"]=fixed_assets_other_than_dwellings+dwellings;
-    #     calibration_data["dwellings"]=dwellings;
-    # end
+    if !(geo in ["AT", "CZ", "EL", "FI", "LV", "SK"])  # OR [2025-05-06 Di]: removed DK
+        fixed_assets_other_than_dwellings=(calibration_data["fixed_assets"]-calibration_data["dwellings"])'.*((calibration_data["fixed_assets_eu7"]-calibration_data["dwellings_eu7"])./calibration_data["nominal_nace64_output_eu7"].*output)./sum((calibration_data["fixed_assets_eu7"]-calibration_data["dwellings_eu7"])./calibration_data["nominal_nace64_output_eu7"].*output);
+        dwellings=zeros(size(fixed_assets_other_than_dwellings));
+        dwellings[44,:]=calibration_data["dwellings"];
+        calibration_data["fixed_assets"]=fixed_assets_other_than_dwellings+dwellings;
+        calibration_data["dwellings"]=dwellings;
+    end
 
-    # save("../data/040_calibration_input_data/', char(geos(g)),'.mat'],'calibration_data');
-    # clear calibration_data;
     return calibration_data
 end

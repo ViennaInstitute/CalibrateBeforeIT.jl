@@ -494,7 +494,6 @@ function import_data(geo, start_year, end_year)
     ## Adjust length of time series
     ##
 
-    # #     TODO
     # fields=fieldnames(data);
     # for l=1:numel(fields)
     #     eval(['p=length(data.',fields{l},');']);
@@ -502,6 +501,8 @@ function import_data(geo, start_year, end_year)
     #         eval(['data.',fields{l},'=[NaN*zeros(1,size(data.',fields{l},',2));data.',fields{l},"']);
     #     end
     # end
+    ## OR: Not sure if necessary to replicate in Julia. Let's wait until errors
+    ## are thrown:
     for (key, value) in data
         data_length = length(value)
         if (data_length == length(data["years_num"]) - 1) || (data_length == length(data["quarters_num"]) - 1)
