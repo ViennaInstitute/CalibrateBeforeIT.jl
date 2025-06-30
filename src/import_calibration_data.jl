@@ -16,6 +16,10 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
 
     calibration_data = Dict()
 
+    ## Set these date numbers
+    calibration_data["years_num"] = date2num_yearly(start_calibration_year:end_calibration_year)
+    calibration_data["quarters_num"] = date2num_quarterly(start_calibration_year:end_calibration_year)
+
     ## time series
     if geo in ["FR", "IE", "LT", "LU", "MT", "PL", "SE"]
         sqlquery="SELECT value FROM '$(pqfile("nama_10_a64"))' WHERE nace_r2='TOTAL' AND time IN ($(years_str)) AND unit = 'CP_MEUR' AND na_item='P51C' AND geo='$(geo)' ORDER BY time, nace_r2"

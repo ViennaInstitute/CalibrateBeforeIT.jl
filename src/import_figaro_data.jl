@@ -6,11 +6,12 @@
 # using ..Utils
 
 
-function import_figaro_data(geo, save_path,
-                            all_years, number_sectors, number_years)
+function import_figaro_data(geo,
+                            start_calibration_year, end_calibration_year,
+                            number_sectors, number_years)
     conn = DBInterface.connect(DuckDB.DB)
+    all_years = collect(start_calibration_year:end_calibration_year)
     years_str = join(["'$(year)'" for year in all_years], ", ")
-    sp = save_path
 
     figaro = Dict()
 

@@ -15,6 +15,11 @@ function import_data(geo, start_year, end_year)
 
     data = Dict()
 
+    ## Set these date numbers
+    data["years_num"] = date2num_yearly(start_year:end_year)
+    data["quarters_num"] = date2num_quarterly(start_year:end_year)
+
+
     ## GDP time series
     ##
     sqlquery="SELECT value FROM '$(pqfile("nama_10_gdp"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND na_item='B1GQ' AND unit='CP_MEUR' ORDER BY time"
