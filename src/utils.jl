@@ -68,7 +68,7 @@ num2date(n::Number) = MATLAB_EPOCH + Dates.Millisecond(round(Int64, n * 1000 * 6
 @testset "DateTime Conversion" begin
     @test date2num(DateTime(2010, 12, 31)) == 734503
     @test date2num(2010, 12, 31) == 734503
-    @test date2num(start_calibration_year:end_calibration_year, 12, 31) ==
+    @test date2num_yearly(2010:2022) ==
         [734503, 734868, 735234, 735599, 735964, 736329, 736695,
          737060, 737425, 737790, 738156, 738521, 738886]
 end
