@@ -58,7 +58,7 @@ end
 
 date2num(d::Dates.DateTime) = Int64(Dates.value(d - MATLAB_EPOCH) / (1000 * 60 * 60 * 24))
 date2num(year::Int64, month::Int64, day::Int64) = date2num(DateTime(year, month, day))
-date2num_yearly(years_range::UnitRange) = [date2num(this_year, month, day) for this_year in years_range]
+date2num_yearly(years_range::UnitRange) = [date2num(this_year, 12, 31) for this_year in years_range]
 date2num_quarterly(years_range::UnitRange) = reduce(vcat, [[date2num(this_year, 3, 31), date2num(this_year, 6, 30), date2num(this_year, 9, 30), date2num(this_year, 12, 31)] for this_year in years_range])
 
 # inverse function of the above
