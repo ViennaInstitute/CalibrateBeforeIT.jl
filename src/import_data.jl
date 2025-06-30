@@ -4,8 +4,8 @@ function import_data(geo, start_year, end_year)
     conn = DBInterface.connect(DuckDB.DB)
     all_years = collect(start_year:end_year)
 
-    number_years=end_year-start_year;
-    number_quarters=number_years*4;
+    number_years = end_year - start_year + 1;
+    number_quarters = number_years * 4;
     years_str = join(["'$(year)'" for year in all_years], ", ")
     ## Create a year-quarter vector and string for creating a data.frame and for SQL
     ## queries
@@ -466,8 +466,7 @@ function import_data(geo, start_year, end_year)
     data["nace10_gva_deflator_growth"]=0.01*execute(conn,sqlquery);
     data["nace10_gva_deflator_growth"]=reshape(data["nace10_gva_deflator_growth"],(Int64(length(data["nace10_gva_deflator_growth"])/10),10));
 
-    # ## TODO fix: sizes of summands does not match
-    # data["nominal_nace10_gva_growth"]=data["real_nace10_gva_growth"]+data["gva_deflator_growth"];
+    data["nominal_nace10_gva_growth"]=data["real_nace10_gva_growth"] .+ data["gva_deflator_growth"];
 
     sqlquery="SELECT value FROM '$(pqfile("namq_10_a10"))' WHERE time IN ($(quarters_str)) AND geo='$(geo)' AND nace_r2 NOT IN ('C', 'TOTAL') AND na_item='B1G' AND unit='CP_MEUR' AND s_adj='SCA' ORDER BY nace_r2, time"
     data["nominal_nace10_gva_quarterly"]=execute(conn,sqlquery);
@@ -503,9 +502,15 @@ function import_data(geo, start_year, end_year)
     #         eval(['data.',fields{l},'=[NaN*zeros(1,size(data.',fields{l},',2));data.',fields{l},"']);
     #     end
     # end
+    for (key, value) in data
+        data_length = length(value)
+        if (data_length == length(data["years_num"]) - 1) || (data_length == length(data["quarters_num"]) - 1)
+            println(key, ": ", length(value))
+            error("Series $(key) has length $(length(value)) which is one too short!")
+        end
+    end
 
     return data
-
 end
 
 # end
