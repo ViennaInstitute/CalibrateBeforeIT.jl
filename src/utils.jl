@@ -55,6 +55,7 @@ end
     # For example, testing with different input ranges or edge cases
 end
 
+using Dates
 
 date2num(d::Dates.DateTime) = Int64(Dates.value(d - MATLAB_EPOCH) / (1000 * 60 * 60 * 24))
 date2num(year::Int64, month::Int64, day::Int64) = date2num(DateTime(year, month, day))
