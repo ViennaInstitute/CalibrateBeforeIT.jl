@@ -17,5 +17,6 @@ include("import_data.jl")
 include("import_calibration_data.jl")
 include("get_params_and_initial_conditions.jl")
 
+global save_path = "data/010_eurostat_tables"
 
 end # module CalibrateBeforeIT
