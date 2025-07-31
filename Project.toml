@@ -1,4 +1,4 @@
-name = "Calibration_BeforeIT"
+name = "CalibrateBeforeIT"
 uuid = "05295df1-6f6a-4591-b1c3-a476c06dd2c5"
 authors = ["Oliver Reiter <reiter@wiiw.ac.at>"]
 version = "0.1.0"
