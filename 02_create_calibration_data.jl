@@ -8,34 +8,22 @@
 
 cd(@__DIR__)
 
-using Pkg
-Pkg.activate(Base.current_project())
-using Revise
-using DataFrames
-using QuackIO
-using DuckDB
-using Tables
-using Dates
-using StatsBase ## only for cov in get_params_and_initial_conditions
+import CalibrateBeforeIT as CBit
 
-includet("src/utils.jl")
-includet("src/import_figaro_data.jl")
-includet("src/import_data.jl")
-includet("src/import_calibration_data.jl")
-includet("src/get_params_and_initial_conditions.jl")
+## Set some parameters for the data-downloading process. `save_path` is already
+## set to a default directory value, which can be re-set here:
+# CBit.save_path = "data/010_eurostat_tables"
+mkpath(CBit.save_path)
 
-## Set some parameters for the data-downloading process
-global const save_path = "data/010_eurostat_tables"
-mkpath(save_path)
-
-## Save calibration data into such a struct
+## Save calibration data into such a struct (TODO should be sourced from
+## BeforeIT.jl)
 struct CalibrationData
     calibration::Dict{String, Any}
     figaro::Dict{String, Any}
     data::Dict{String, Any}
     ea::Dict{String, Any}
-    max_calibration_date::DateTime
-    estimation_date::DateTime
+    max_calibration_date::CBit.DateTime
+    estimation_date::CBit.DateTime
 end
 
 ##------------------------------------------------------------
@@ -48,6 +36,8 @@ end_year = 2024
 ## For `import_figaro_data`:
 start_calibration_year = 2010;
 end_calibration_year = 2022; # the last year for which there are IO tables
+max_calibration_date = CBit.DateTime(2020, 12, 31)
+estimation_date = CBit.DateTime(1996, 12, 31)
 number_years = end_calibration_year - start_calibration_year + 1;
 number_quarters = number_years*4;
 number_sectors = 62;
@@ -56,12 +46,14 @@ number_sectors = 62;
 ## countries excluding the non-working ones:
 ## geo=["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR", "HU", "IE", "IT", "LV", "NL", "PL", "PT", "RO", "SI", "SK"]
 ## countries whose data is available until 2023 (additionally excludes DK, HR)
-all_countries=["AT", "BE", "BG", "CY", "CZ", "DE", "EE", "EL", "ES", "FI", "FR", "HU", "IE", "IT", "LV", "NL", "PL", "PT", "RO", "SI", "SK"]
+# all_countries=["AT", "BE", "BG", "CY", "CZ", "DE", "EE", "EL", "ES", "FI", "FR", "HU", "IE", "IT", "LV", "NL", "PL", "PT", "RO", "SI", "SK"]
+# all_countries=["FR", "HU", "IE", "IT", "LV", "NL", "PL", "PT", "RO", "SI", "SK"]
+all_countries=["AT"]
 
 
 ## This step does the same queries as step 5 with import_data(), but with geo ==
 ## "EA19". Only difference is that with EA19, unemployment rates are not used
-ea_data = import_data("EA19", start_year, end_year)
+ea_data = CBit.import_data("EA19", start_year, end_year)
 
 ##------------------------------------------------------------
 ## Set some parameters necessary to carry out the calibration functions
@@ -71,38 +63,71 @@ for geo in all_countries
 
     ##------------------------------------------------------------
     ## Step 5: "Import figaro": Input-Output data and other indicators
-    ctry_figaro = import_figaro_data(geo, start_calibration_year, end_calibration_year,
-                                     number_sectors, number_years)
+    ctry_figaro = CBit.import_figaro_data(geo, start_calibration_year, end_calibration_year,
+                                          number_sectors, number_years)
 
 
     ##------------------------------------------------------------
     ## Step 6: "Import data": GDP, GVA, Consumption time series
-    ctry_data = import_data(geo, start_year, end_year)
+    ctry_data = CBit.import_data(geo, start_year, end_year)
 
 
     ##------------------------------------------------------------
     ## Step 7: "Import calibration data"
-    ctry_calibration_data = import_calibration_data(geo,
-                                                    start_calibration_year,
-                                                    end_calibration_year,
-                                                    number_sectors,
-                                                    ctry_figaro)
+    ctry_calibration_data = CBit.import_calibration_data(geo,
+                                                         start_calibration_year,
+                                                         end_calibration_year,
+                                                         number_sectors,
+                                                         ctry_figaro)
 
 
     ##------------------------------------------------------------
     ## Step 8: Calculate the initial conditions and parameters
-    calibration_date = DateTime(start_calibration_year, 03, 31);
-    max_calibration_date = DateTime(2020, 12, 31)
-    estimation_date = DateTime(1996, 12, 31)
+    for calibration_year in start_calibration_year:end_calibration_year
+        for calibration_quarter in [3, 6, 9, 12]
+            @info calibration_year calibration_quarter
+            calibration_date = CBit.DateTime(calibration_year, calibration_quarter,
+                                             calibration_quarter in [3, 12] ? 31 : 30);
 
-    calibration_object = CalibrationData(
-        ctry_calibration_data,
-        ctry_figaro,
-        ctry_data,
-        ea_data,
-        max_calibration_date, estimation_date)
+            calibration_object = CalibrationData(
+                ctry_calibration_data,
+                ctry_figaro,
+                ctry_data,
+                ea_data,
+                max_calibration_date, estimation_date)
 
-    parameters, initial_conditions =
-        get_params_and_initial_conditions(calibration_object,
-                                          calibration_date; scale = 1/10000);
+            parameters, initial_conditions =
+                CBit.get_params_and_initial_conditions(calibration_object,
+                                                       calibration_date; scale = 1/10000);
+
+            # ## Helper code to generate "reference" objects to be used in the tests:
+            # using JLD2
+            # jldsave("test/$(geo)_2010Q1_calibration_object.jld2";
+            #         reference_calibration_object=calibration_object)
+            # jldsave("test/$(geo)_2010Q1_parameters_initial_conditions.jld2";
+            #         reference_parameters=parameters,
+            #         reference_initial_conditions=initial_conditions)
+
+            ## TODO save the objects them somewhere
+        end
+    end
 end
+
+# import BeforeIT as Bit
+# using Plots
+
+# model = Bit.Model(parameters, initial_conditions)
+# T = 20
+# Bit.run!(model, T)
+
+# p1 = plot(model.data.real_gdp, title = "gdp", titlefont = 10)
+# p2 = plot(model.data.real_household_consumption, title = "household cons.", titlefont = 10)
+# p3 = plot(model.data.real_government_consumption, title = "gov. cons.", titlefont = 10)
+# p4 = plot(model.data.real_capitalformation, title = "capital form.", titlefont = 10)
+# p5 = plot(model.data.real_exports, title = "exports", titlefont = 10)
+# p6 = plot(model.data.real_imports, title = "imports", titlefont = 10)
+# p7 = plot(model.data.wages, title = "wages", titlefont = 10)
+# p8 = plot(model.data.euribor, title = "euribor", titlefont = 10)
+# p9 = plot(model.data.nominal_gdp ./ model.data.real_gdp, title = "gdp deflator", titlefont = 10)
+
+# plot(p1, p2, p3, p4, p5, p6, p7, p8, p9, layout = (3, 3), legend = false)

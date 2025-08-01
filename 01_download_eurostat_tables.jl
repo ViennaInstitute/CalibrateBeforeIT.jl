@@ -4,23 +4,12 @@
 
 cd(@__DIR__)
 
-using Pkg
-Pkg.activate(Base.current_project())
-using Revise
-using CSV
-using DataFrames
-using Downloads
-using QuackIO
-using DuckDB
-using Tables
-
-includet("src/utils.jl")
-includet("src/import_eurostat.jl")
+import CalibrateBeforeIT as CBit
 
 ## Set some parameters for the data-downloading process
 global const save_path = "data/010_eurostat_tables"
 mkpath(save_path)
-conn = DBInterface.connect(DuckDB.DB)
+conn = CBit.DuckDB.DBInterface.connect(CBit.DuckDB.DB)
 
 
 ##------------------------------------------------------------
@@ -28,7 +17,7 @@ conn = DBInterface.connect(DuckDB.DB)
 all_eurostat_table_ids = readlines("docs/00_table.txt");
 for table_id in all_eurostat_table_ids
     @info table_id
-    download_to_parquet(table_id, save_path)
+    CBit.download_to_parquet(table_id, save_path)
 end
 
 
@@ -36,9 +25,9 @@ end
 ## Step 2: Save the NACE64.csv (industry classification table) as parquet too
 table_id = "nace64"
 csv_filename = "data/$(table_id).csv"
-nace64_table = CSV.read(csv_filename, DataFrame;
-                        delim = ",")
-write_table(joinpath(save_path, "$(table_id).parquet"),
+nace64_table = CBit.CSV.read(csv_filename, CBit.DataFrame;
+                             delim = ",")
+CBit.write_table(joinpath(save_path, "$(table_id).parquet"),
             nace64_table, format = :parquet)
 
 
@@ -51,7 +40,7 @@ sqlquery = "COPY " *
     "SELECT * FROM '$(joinpath(save_path, "naio_10_fcp_ii2.parquet"))' UNION ALL " *
     " SELECT * FROM '$(joinpath(save_path, "naio_10_fcp_ii3.parquet"))') " *
     "TO '$(joinpath(save_path, "naio_10_fcp_ii.parquet"))' (FORMAT parquet)"
-DBInterface.execute(conn, sqlquery);
+CBit.DuckDB.DBInterface.execute(conn, sqlquery);
 
 
 ## Step 4: Create bd_9ac_l_form_a64 from bd_9ac_l_form_r2
@@ -77,7 +66,7 @@ sqlquery = "COPY (WITH sbs AS ( " *
     "WHERE foo.nace NOT IN ('L68A','T','U') " *
     "ORDER BY foo.nace " *
     ") TO '$(pqfile("bd_9ac_l_form_a64"))' (FORMAT parquet);"
-DBInterface.execute(conn, sqlquery)
+CBit.DuckDB.DBInterface.execute(conn, sqlquery)
 
 ## Step 5: Create sbs_na_sca_a64 from sbs_na_sca_r2
 sqlquery = "COPY (WITH sbs AS ( " *
@@ -101,7 +90,7 @@ sqlquery = "COPY (WITH sbs AS ( " *
     "WHERE foo.nace NOT IN ('L68A','T','U') " *
     "ORDER BY foo.nace " *
     ") TO '$(pqfile("sbs_na_sca_a64"))' (FORMAT parquet)"
-DBInterface.execute(conn, sqlquery)
+CBit.DuckDB.DBInterface.execute(conn, sqlquery)
 
 
 # test = "SELECT * FROM '$(pqfile("bd_9ac_l_form_a64"))' LIMIT 10;"
