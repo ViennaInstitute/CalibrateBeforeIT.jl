@@ -9,6 +9,10 @@ using Test
         include("test_download_function.jl")
     end
 
+    @testset "Library Functions Tests" begin
+        include("test_library_functions.jl")
+    end
+
     @testset "Calibration Tests" begin
         include("params_and_initial_conditions.jl")
     end

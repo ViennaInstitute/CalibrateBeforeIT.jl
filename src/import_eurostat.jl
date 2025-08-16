@@ -74,7 +74,7 @@ formatting flags, and saves it as a Parquet file for efficient querying.
 # Example
 ```julia
 result = download_to_parquet("nama_10_gdp", "data/eurostat")
-println("Downloaded \$(result.rows_processed) rows to \$(result.parquet_path)")
+println("Downloaded ", result.rows_processed, " rows to ", result.parquet_path)
 ```
 """
 function download_to_parquet(table_id::String, save_path::String; 
@@ -344,5 +344,141 @@ end
 
 Base.showerror(io::IO, e::DownloadError) = print(io, "DownloadError: ", e.message)
 Base.showerror(io::IO, e::ProcessingError) = print(io, "ProcessingError: ", e.message)
+
+"""
+    combine_figaro_tables(save_path::String; 
+                         conn=nothing,
+                         input_tables=["naio_10_fcp_ii1", "naio_10_fcp_ii2", "naio_10_fcp_ii3"],
+                         output_table="naio_10_fcp_ii",
+                         skip_if_missing=true)
+
+Combine the three FIGARO Input-Output tables into a single table.
+
+Eurostat splits the FIGARO IO tables into three separate tables by time periods:
+- naio_10_fcp_ii1: 2010-2014 
+- naio_10_fcp_ii2: 2015-2019
+- naio_10_fcp_ii3: 2020 onwards
+
+This function appends them into one table for efficient querying.
+
+# Arguments
+- `save_path::String`: Directory containing the Parquet files
+- `conn`: DuckDB connection (optional, will create if not provided)
+- `input_tables::Vector{String}`: Names of input tables to combine (default: FIGARO tables)
+- `output_table::String`: Name of the combined output table (default: "naio_10_fcp_ii")
+- `skip_if_missing::Bool`: If true, return nothing when files are missing; if false, throw error (default: true)
+
+# Returns
+- `NamedTuple`: Information about the combination operation, or `nothing` if skipped due to missing files
+
+# Example
+```julia
+import CalibrateBeforeIT as CBit
+save_path = "data/010_eurostat_tables"
+result = CBit.combine_figaro_tables(save_path)
+if result !== nothing
+    println("Combined ", length(result.input_tables), " tables into ", result.output_file)
+else
+    println("Combination skipped - files not ready")
+end
+```
+"""
+function combine_figaro_tables(save_path::String; 
+                              conn=nothing,
+                              input_tables=["naio_10_fcp_ii1", "naio_10_fcp_ii2", "naio_10_fcp_ii3"],
+                              output_table="naio_10_fcp_ii",
+                              skip_if_missing=true)
+    
+    @info "Combining FIGARO tables: $(join(input_tables, ", ")) → $output_table"
+    
+    # Validate inputs
+    if isempty(input_tables)
+        throw(ArgumentError("At least one input table must be specified"))
+    end
+    
+    if !isdir(save_path)
+        if skip_if_missing
+            @warn "Could not combine FIGARO tables (directory does not exist): $save_path"
+            @info "Skipping FIGARO combination - ensure save directory exists and input tables are downloaded"
+            return nothing
+        else
+            throw(ArgumentError("Save path directory does not exist: $save_path"))
+        end
+    end
+    
+    # Check that all input files exist
+    missing_files = String[]
+    input_files = String[]
+    for table in input_tables
+        file_path = joinpath(save_path, "$(table).parquet")
+        if !isfile(file_path)
+            push!(missing_files, file_path)
+        else
+            push!(input_files, file_path)
+        end
+    end
+    
+    if !isempty(missing_files)
+        if skip_if_missing
+            @warn "Could not combine FIGARO tables (some files not found): $(join(missing_files, ", "))"
+            @info "Skipping FIGARO combination - ensure input tables are downloaded first"
+            return nothing
+        else
+            throw(ArgumentError("Missing input files: $(join(missing_files, ", "))"))
+        end
+    end
+    
+    # Create database connection if not provided
+    local_conn = false
+    if conn === nothing
+        conn = DuckDB.DBInterface.connect(DuckDB.DB())
+        local_conn = true
+    end
+    
+    output_file = joinpath(save_path, "$(output_table).parquet")
+    
+    try
+        # Build SQL query for combining tables
+        union_clauses = ["SELECT * FROM '$file'" for file in input_files]
+        union_query = join(union_clauses, " UNION ALL ")
+        
+        sqlquery = "COPY ($union_query) TO '$output_file' (FORMAT parquet)"
+        
+        @info "Executing SQL query to combine tables..."
+        start_time = time()
+        
+        DuckDB.DBInterface.execute(conn, sqlquery)
+        
+        processing_time = time() - start_time
+        
+        # Verify output file was created
+        if !isfile(output_file)
+            throw(ProcessingError("Output file was not created: $output_file"))
+        end
+        
+        @info "✅ Successfully combined $(length(input_tables)) tables in $(round(processing_time, digits=2))s"
+        @info "Output: $output_file"
+        
+        return (
+            input_tables = input_tables,
+            input_files = input_files,
+            output_table = output_table,
+            output_file = output_file,
+            processing_time = processing_time,
+            query = sqlquery
+        )
+        
+    catch e
+        error_msg = "Failed to combine FIGARO tables: $e"
+        @error error_msg
+        throw(ProcessingError(error_msg))
+        
+    finally
+        # Close connection if we created it
+        if local_conn && conn !== nothing
+            DuckDB.DBInterface.close!(conn)
+        end
+    end
+end
 
 # end

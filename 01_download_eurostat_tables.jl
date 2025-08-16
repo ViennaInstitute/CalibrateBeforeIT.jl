@@ -43,12 +43,10 @@ CBit.write_table(joinpath(save_path, "$(table_id).parquet"),
 ## Step 3: Append the three Figaro tables into one. Eurostat splits the Figaro
 ## IO tables into three separate tables. For us to query them efficiently, we
 ## append them onto each other and save them again as a .parquet file.
-sqlquery = "COPY " *
-    "(SELECT * FROM '$(joinpath(save_path, "naio_10_fcp_ii1.parquet"))' UNION ALL " *
-    "SELECT * FROM '$(joinpath(save_path, "naio_10_fcp_ii2.parquet"))' UNION ALL " *
-    " SELECT * FROM '$(joinpath(save_path, "naio_10_fcp_ii3.parquet"))') " *
-    "TO '$(joinpath(save_path, "naio_10_fcp_ii.parquet"))' (FORMAT parquet)"
-CBit.DuckDB.DBInterface.execute(conn, sqlquery);
+result_figaro = CBit.combine_figaro_tables(save_path; conn=conn)
+if result_figaro !== nothing
+    @info "FIGARO combination result: $(result_figaro.output_file)"
+end
 
 
 ## Step 4: Create bd_9ac_l_form_a64 from bd_9ac_l_form_r2
