@@ -288,8 +288,21 @@ function process_eurostat_tsv(tsv_filename::String, table_id::String)
         
         @info "Splitting dimension column into: $(join(new_cols, ", "))"
         
+        # Create a safer splitting function that ensures consistent array lengths
+        n_expected_cols = length(new_cols)
+        safe_split = x -> begin
+            parts = split(x, ",")
+            # Pad with empty strings if too few parts, truncate if too many
+            if length(parts) < n_expected_cols
+                parts = vcat(parts, fill("", n_expected_cols - length(parts)))
+            elseif length(parts) > n_expected_cols
+                parts = parts[1:n_expected_cols]
+            end
+            return parts
+        end
+        
         split_table = transform(cleaned_table,
-                               Symbol(col1) => ByRow(x -> split(x, ",")) => Symbol.(new_cols))
+                               Symbol(col1) => ByRow(safe_split) => Symbol.(new_cols))
         select!(split_table, Not(Symbol(col1)))
         
     catch e
