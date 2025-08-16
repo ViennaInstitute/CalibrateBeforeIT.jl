@@ -35,5 +35,5 @@ jobs:
       - name: Build package
         uses: julia-actions/julia-buildpkg@v1
         
-      - name: Run CI tests
-        run: julia --project=. test/test_ci.jl
+      - name: Run tests
+        uses: julia-actions/julia-runtest@v1
