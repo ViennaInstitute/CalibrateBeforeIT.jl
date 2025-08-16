@@ -5,6 +5,8 @@
 # using Downloads
 # using QuackIO
 
+using Dates  # For now() function in metadata
+
 
 # Function to process each element, remove Eurostat flags and try to convert it
 # to Float64
@@ -37,56 +39,297 @@ function transform_columns(df, cols)
     return df
 end
 
-# table_id = "irt_st_a"
-# save_path = "../data/010_eurostat_tables"
-function download_to_parquet(table_id, save_path; use_cached_tsv = false)
-    url = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/$(table_id)/?format=TSV&compressed=false"
-    tsv_filename = joinpath(save_path, "$(table_id).tsv")
-    if use_cached_tsv == false
-        http_response = Downloads.download(url, tsv_filename)
+"""
+    download_to_parquet(table_id::String, save_path::String; 
+                       use_cached_tsv::Bool = false,
+                       timeout::Int = 300,
+                       retry_attempts::Int = 3) -> NamedTuple
+
+Download a Eurostat table and convert it to Parquet format.
+
+Downloads data from the Eurostat API, processes it to clean Eurostat-specific 
+formatting flags, and saves it as a Parquet file for efficient querying.
+
+# Arguments
+- `table_id::String`: Eurostat table identifier (e.g., "nama_10_gdp")
+- `save_path::String`: Directory path where files will be saved
+- `use_cached_tsv::Bool`: If true, skip download if TSV file already exists (default: false)
+- `timeout::Int`: Download timeout in seconds (default: 300)
+- `retry_attempts::Int`: Number of download retry attempts (default: 3)
+
+# Returns
+- `NamedTuple`: Contains paths and processing summary
+  - `tsv_path::String`: Path to downloaded TSV file
+  - `parquet_path::String`: Path to created Parquet file
+  - `rows_processed::Int`: Number of data rows processed
+  - `columns_processed::Int`: Number of columns processed
+  - `download_time::Float64`: Download time in seconds
+  - `processing_time::Float64`: Processing time in seconds
+
+# Throws
+- `ArgumentError`: If table_id is invalid or save_path cannot be created
+- `DownloadError`: If download fails after all retry attempts
+- `ProcessingError`: If data processing fails
+
+# Example
+```julia
+result = download_to_parquet("nama_10_gdp", "data/eurostat")
+println("Downloaded \$(result.rows_processed) rows to \$(result.parquet_path)")
+```
+"""
+function download_to_parquet(table_id::String, save_path::String; 
+                            use_cached_tsv::Bool = false,
+                            timeout::Int = 300,
+                            retry_attempts::Int = 3)
+    
+    # Input validation
+    validate_download_inputs(table_id, save_path, timeout, retry_attempts)
+    
+    # Ensure save directory exists
+    try
+        mkpath(save_path)
+    catch e
+        throw(ArgumentError("Cannot create save directory '$save_path': $e"))
     end
-
-    raw_table = CSV.read(tsv_filename, DataFrame;
-                         delim = "\t",
-                         missingstring = ["", ":", ": ", ": b", ": bc",
-                                          ": c", ": cd", ": d", ": e",
-                                          ": n", ": m", ": p", ": z"])
-    # show(describe(raw_table, :eltype); allrows = true)
-
-    ## delete extraoneaus whitespace at the end
-    rename!(x -> replace(x, r" +$" => ""), raw_table)
-
-    ## The year columns are all columns except the very first
-    year_cols = names(raw_table)[2:end]
-
-    ## Apply the cleaning function to all year columns
-    cleaned_table = transform_columns(raw_table, year_cols)
-    cleaned_table = identity.(cleaned_table)
-    # show(describe(cleaned_table, :eltype); allrows = true)
-    # cleaned_table[isnothing.(cleaned_table[!, "2020"]), "2020"]
-
-    # x = cleaned_table[!, "2014-Q1"]
-    # # cleaned_table[isnothing.(x), "2014-Q1"]
-    # raw_table[isnothing.(x), "2014-Q1"]
-
-    ## Split the first column into multiple columns
-    col1 = names(raw_table)[1]
-    col1new = replace(col1, "\\TIME_PERIOD" => "")
-    new_cols = split(col1new, ",")
-    split_table = transform(cleaned_table,
-                            Symbol(col1) => ByRow(x -> split(x, ",")) => Symbol.(new_cols))
-    select!(split_table, Not(Symbol(col1)))
-
-    ## Convert the wide table to long format by stacking. Rename the 'variable'
-    ## column to a proper 'time' column
-    long_table = stack(split_table, Not(Symbol.(new_cols)))
-    rename!(long_table, :variable => :time)
-    # transform!(long_table, :variable => ByRow(x -> tryparse(Int64, x)) => :time)
-    # describe(long_table, :eltype)
-
-    ## write parquet
-    write_table(joinpath(save_path, "$(table_id).parquet"),
-                long_table, format = :parquet)
+    
+    # File paths
+    tsv_filename = joinpath(save_path, "$(table_id).tsv")
+    parquet_filename = joinpath(save_path, "$(table_id).parquet")
+    
+    # Download phase
+    download_time = @elapsed begin
+        if !use_cached_tsv || !isfile(tsv_filename)
+            download_eurostat_tsv(table_id, tsv_filename, timeout, retry_attempts)
+        else
+            @info "Using cached TSV file: $tsv_filename"
+        end
+    end
+    
+    # Processing phase
+    processing_time = @elapsed begin
+        processed_data = process_eurostat_tsv(tsv_filename, table_id)
+    end
+    
+    # Save as Parquet
+    try
+        write_table(parquet_filename, processed_data.table, format = :parquet)
+        @info "Successfully created Parquet file: $parquet_filename"
+    catch e
+        throw(ProcessingError("Failed to write Parquet file '$parquet_filename': $e"))
+    end
+    
+    # Return summary
+    return (
+        tsv_path = tsv_filename,
+        parquet_path = parquet_filename,
+        rows_processed = nrow(processed_data.table),
+        columns_processed = ncol(processed_data.table),
+        download_time = download_time,
+        processing_time = processing_time,
+        metadata = processed_data.metadata
+    )
 end
+
+"""
+    validate_download_inputs(table_id, save_path, timeout, retry_attempts)
+
+Validate inputs for download_to_parquet function.
+"""
+function validate_download_inputs(table_id::String, save_path::String, timeout::Int, retry_attempts::Int)
+    # Validate table_id
+    if isempty(strip(table_id))
+        throw(ArgumentError("table_id cannot be empty"))
+    end
+    
+    # Check for invalid characters in table_id (basic validation)
+    if !occursin(r"^[a-zA-Z0-9_]+$", table_id)
+        throw(ArgumentError("table_id '$table_id' contains invalid characters (only letters, numbers, and underscores allowed)"))
+    end
+    
+    # Validate save_path
+    if isempty(strip(save_path))
+        throw(ArgumentError("save_path cannot be empty"))
+    end
+    
+    # Validate timeout
+    if timeout <= 0
+        throw(ArgumentError("timeout must be positive (got $timeout)"))
+    end
+    
+    # Validate retry_attempts
+    if retry_attempts < 0
+        throw(ArgumentError("retry_attempts must be non-negative (got $retry_attempts)"))
+    end
+end
+
+"""
+    download_eurostat_tsv(table_id, tsv_filename, timeout, retry_attempts)
+
+Download TSV file from Eurostat API with retry logic.
+"""
+function download_eurostat_tsv(table_id::String, tsv_filename::String, timeout::Int, retry_attempts::Int)
+    url = "https://ec.europa.eu/eurostat/api/dissemination/sdmx/2.1/data/$(table_id)/?format=TSV&compressed=false"
+    
+    @info "Downloading Eurostat table: $table_id"
+    @info "URL: $url"
+    
+    last_error = nothing
+    
+    for attempt in 1:(retry_attempts + 1)
+        try
+            if attempt > 1
+                @info "Download attempt $attempt/$(retry_attempts + 1) for table $table_id"
+            end
+            
+            # Download with timeout
+            Downloads.download(url, tsv_filename; timeout = timeout)
+            
+            # Verify file was created and has content
+            if !isfile(tsv_filename)
+                throw(DownloadError("Downloaded file does not exist: $tsv_filename"))
+            end
+            
+            file_size = filesize(tsv_filename)
+            if file_size == 0
+                throw(DownloadError("Downloaded file is empty: $tsv_filename"))
+            end
+            
+            @info "Successfully downloaded table $table_id ($(round(file_size/1024, digits=1)) KB)"
+            return
+            
+        catch e
+            last_error = e
+            @warn "Download attempt $attempt failed for table $table_id: $e"
+            
+            # Clean up partial download
+            if isfile(tsv_filename)
+                try
+                    rm(tsv_filename)
+                catch cleanup_error
+                    @warn "Could not clean up partial download: $cleanup_error"
+                end
+            end
+            
+            # Wait before retry (exponential backoff)
+            if attempt <= retry_attempts
+                wait_time = 2^(attempt - 1)
+                @info "Waiting $(wait_time) seconds before retry..."
+                sleep(wait_time)
+            end
+        end
+    end
+    
+    # All attempts failed
+    throw(DownloadError("Failed to download table '$table_id' after $(retry_attempts + 1) attempts. Last error: $last_error"))
+end
+
+"""
+    process_eurostat_tsv(tsv_filename, table_id) -> NamedTuple
+
+Process downloaded Eurostat TSV file into clean tabular format.
+"""
+function process_eurostat_tsv(tsv_filename::String, table_id::String)
+    @info "Processing TSV file: $tsv_filename"
+    
+    # Read raw TSV file
+    local raw_table  # Declare variable in outer scope
+    try
+        raw_table = CSV.read(tsv_filename, DataFrame;
+                            delim = "\t",
+                            missingstring = ["", ":", ": ", ": b", ": bc",
+                                           ": c", ": cd", ": d", ": e",
+                                           ": n", ": m", ": p", ": z"])
+        
+        if nrow(raw_table) == 0
+            throw(ProcessingError("TSV file is empty or could not be parsed: $tsv_filename"))
+        end
+        
+        @info "Read $(nrow(raw_table)) rows and $(ncol(raw_table)) columns from TSV"
+        
+    catch e
+        throw(ProcessingError("Failed to read TSV file '$tsv_filename': $e"))
+    end
+    
+    # Clean column names (remove trailing whitespace)
+    try
+        rename!(x -> replace(x, r" +$" => ""), raw_table)
+    catch e
+        throw(ProcessingError("Failed to clean column names: $e"))
+    end
+    
+    # Identify year/time columns (all except first)
+    if ncol(raw_table) < 2
+        throw(ProcessingError("Table must have at least 2 columns (got $(ncol(raw_table)))"))
+    end
+    
+    year_cols = names(raw_table)[2:end]
+    @info "Processing $(length(year_cols)) time series columns"
+    
+    # Apply data cleaning to year columns
+    local cleaned_table  # Declare variable in outer scope
+    try
+        cleaned_table = transform_columns(raw_table, year_cols)
+        cleaned_table = identity.(cleaned_table)
+    catch e
+        throw(ProcessingError("Failed to clean data values: $e"))
+    end
+    
+    # Split first column into separate dimension columns
+    col1 = names(raw_table)[1]
+    
+    local split_table, new_cols  # Declare variables in outer scope
+    try
+        col1new = replace(col1, "\\TIME_PERIOD" => "")
+        new_cols = split(col1new, ",")
+        
+        if isempty(new_cols) || any(isempty.(strip.(new_cols)))
+            throw(ProcessingError("Invalid column structure in first column: '$col1'"))
+        end
+        
+        @info "Splitting dimension column into: $(join(new_cols, ", "))"
+        
+        split_table = transform(cleaned_table,
+                               Symbol(col1) => ByRow(x -> split(x, ",")) => Symbol.(new_cols))
+        select!(split_table, Not(Symbol(col1)))
+        
+    catch e
+        throw(ProcessingError("Failed to split dimension columns: $e"))
+    end
+    
+    # Convert from wide to long format
+    local long_table  # Declare variable in outer scope
+    try
+        long_table = stack(split_table, Not(Symbol.(new_cols)))
+        rename!(long_table, :variable => :time)
+        
+        @info "Converted to long format: $(nrow(long_table)) rows"
+        
+    catch e
+        throw(ProcessingError("Failed to convert to long format: $e"))
+    end
+    
+    # Create metadata
+    metadata = (
+        table_id = table_id,
+        original_dimensions = new_cols,
+        time_columns = year_cols,
+        processed_at = now(),
+        source_file = tsv_filename
+    )
+    
+    return (table = long_table, metadata = metadata)
+end
+
+# Custom exception types for better error handling
+struct DownloadError <: Exception
+    message::String
+end
+
+struct ProcessingError <: Exception
+    message::String
+end
+
+Base.showerror(io::IO, e::DownloadError) = print(io, "DownloadError: ", e.message)
+Base.showerror(io::IO, e::ProcessingError) = print(io, "ProcessingError: ", e.message)
 
 # end

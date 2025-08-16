@@ -3,8 +3,14 @@ import CalibrateBeforeIT as CBit
 
 using Test
 
-# @testset "Calculating initial conditions" begin
+@testset "CalibrateBeforeIT.jl Tests" begin
 
-include("params_and_initial_conditions.jl")
+    @testset "Download Function Tests" begin
+        include("test_download_function.jl")
+    end
 
-# end
+    @testset "Calibration Tests" begin
+        include("params_and_initial_conditions.jl")
+    end
+
+end
