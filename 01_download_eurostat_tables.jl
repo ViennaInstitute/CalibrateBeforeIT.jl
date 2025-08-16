@@ -53,28 +53,8 @@ success, rows = CBit.create_bd_9ac_l_form_a64(save_path, conn)
 @info "Step 4 completed" success rows
 
 ## Step 5: Create sbs_na_sca_a64 from sbs_na_sca_r2
-sqlquery = "COPY (WITH sbs AS ( " *
-    "   WITH nace64 AS (SELECT * FROM '$(CBit.pqfile("nace64"))')" *
-    "   SELECT nace, geo, indic_sb, time, sum(value) AS value FROM '$(CBit.pqfile("sbs_na_sca_r2"))' " *
-    "   JOIN nace64 ON nace_r2::text ~ nace64.regex " *
-    "   WHERE nace_r2 NOT IN (SELECT nace FROM nace64) AND nace NOT IN (SELECT nace_r2 FROM '$(CBit.pqfile("sbs_na_sca_r2"))') AND nace NOT IN ('O','P','Q','T','U') " *
-    "   GROUP BY nace, geo, indic_sb, time " *
-    "   UNION " *
-    "   SELECT nace, geo, indic_sb, time, value FROM '$(CBit.pqfile("sbs_na_sca_r2"))' " *
-    "   JOIN nace64 ON nace_r2=nace64.nace " *
-    "), foo AS ( " *
-    "   WITH sbs_geo AS (SELECT DISTINCT geo FROM '$(CBit.pqfile("sbs_na_sca_r2"))'), " *
-    "   sbs_indic AS (SELECT DISTINCT indic_sb FROM '$(CBit.pqfile("sbs_na_sca_r2"))'), " *
-    "   sbs_time AS (SELECT DISTINCT time FROM '$(CBit.pqfile("sbs_na_sca_r2"))'), " *
-    "   nace64 AS (SELECT * FROM '$(CBit.pqfile("nace64"))') " *
-    "   SELECT nace64.nace, sbs_geo.geo, sbs_indic.indic_sb, sbs_time.time FROM nace64, sbs_geo, sbs_indic, sbs_time " *
-    ") " *
-    "SELECT foo.nace AS nace_r2, foo.geo, foo.indic_sb, foo.time, value FROM foo " *
-    "LEFT JOIN sbs ON foo.nace=sbs.nace AND foo.geo=sbs.geo AND foo.indic_sb=sbs.indic_sb AND foo.time=sbs.time " *
-    "WHERE foo.nace NOT IN ('L68A','T','U') " *
-    "ORDER BY foo.nace " *
-    ") TO '$(CBit.pqfile("sbs_na_sca_a64"))' (FORMAT parquet)"
-CBit.DuckDB.DBInterface.execute(conn, sqlquery)
+success, rows = CBit.create_sbs_na_sca_a64(save_path, conn)
+@info "Step 5 completed" success rows
 
 
 # test = "SELECT * FROM '$(pqfile("bd_9ac_l_form_a64"))' LIMIT 10;"
