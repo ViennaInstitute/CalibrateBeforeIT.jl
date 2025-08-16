@@ -13,6 +13,10 @@ using Test
         include("test_library_functions.jl")
     end
 
+    @testset "Utils Tests" begin
+        include("test_utils.jl")
+    end
+
     @testset "Calibration Tests" begin
         include("params_and_initial_conditions.jl")
     end

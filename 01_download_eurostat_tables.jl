@@ -19,7 +19,7 @@ all_eurostat_table_ids = CBit.get_eurostat_table_ids()
 println(all_eurostat_table_ids)
 
 # Test on a single table
-result = CBit.download_to_parquet("nama_10_an6", save_path)
+result = CBit.download_to_parquet("nama_10_an6", save_path; use_cached_tsv=false)
 println(result)
 
 # Download all tables
