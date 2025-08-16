@@ -19,7 +19,7 @@ all_eurostat_table_ids = CBit.get_eurostat_table_ids()
 println(all_eurostat_table_ids)
 
 # Test on a single table
-result = CBit.download_to_parquet("nama_10_an6", save_path; use_cached_tsv=false)
+result = CBit.download_to_parquet("bd_9ac_l_form_r2", save_path; use_cached_tsv=false)
 println(result)
 
 # Download all tables
@@ -49,29 +49,8 @@ result_figaro = CBit.combine_figaro_tables(save_path; conn=conn, skip_if_missing
 
 
 ## Step 4: Create bd_9ac_l_form_a64 from bd_9ac_l_form_r2
-sqlquery = "COPY (WITH sbs AS ( " *
-    "   WITH nace64 AS (SELECT * FROM '$(CBit.pqfile("nace64"))')" *
-    "   SELECT nace, geo, indic_sb, leg_form, time, sum(value) AS value FROM '$(CBit.pqfile("bd_9ac_l_form_r2"))' " *
-    "   JOIN nace64 ON nace_r2::text ~ nace64.regex " *
-    "   WHERE nace_r2 NOT IN (SELECT nace FROM nace64) AND nace NOT IN (SELECT nace_r2 FROM '$(CBit.pqfile("bd_9ac_l_form_r2"))') AND nace_r2 !~ '^([A-Z][0-9][0-9][0-9])' " *
-    "   GROUP BY nace, geo, indic_sb, leg_form, time " *
-    "   UNION " *
-    "   SELECT nace, geo, indic_sb, leg_form, time, value FROM '$(CBit.pqfile("bd_9ac_l_form_r2"))' " *
-    "   JOIN nace64 ON nace_r2=nace64.nace " *
-    "), foo AS ( " *
-    "   WITH sbs_geo AS (SELECT DISTINCT geo FROM '$(CBit.pqfile("bd_9ac_l_form_r2"))'), " *
-    "   sbs_indic AS (SELECT DISTINCT indic_sb FROM '$(CBit.pqfile("bd_9ac_l_form_r2"))'), " *
-    "   sbs_leg AS (SELECT DISTINCT leg_form FROM '$(CBit.pqfile("bd_9ac_l_form_r2"))'), " *
-    "   sbs_time AS (SELECT DISTINCT time FROM '$(CBit.pqfile("bd_9ac_l_form_r2"))'), " *
-    "   nace64 AS (SELECT * FROM '$(CBit.pqfile("nace64"))') " *
-    "   SELECT nace64.nace, sbs_geo.geo, sbs_indic.indic_sb, sbs_leg.leg_form, sbs_time.time FROM nace64, sbs_geo, sbs_indic, sbs_leg, sbs_time " *
-    ") " *
-    "SELECT foo.indic_sb, foo.leg_form, foo.nace AS nace_r2, foo.geo, foo.time, value FROM foo " *
-    "LEFT JOIN sbs ON foo.nace=sbs.nace AND foo.geo=sbs.geo AND foo.indic_sb=sbs.indic_sb AND foo.leg_form=sbs.leg_form AND foo.time=sbs.time " *
-    "WHERE foo.nace NOT IN ('L68A','T','U') " *
-    "ORDER BY foo.nace " *
-    ") TO '$(CBit.pqfile("bd_9ac_l_form_a64"))' (FORMAT parquet);"
-CBit.DuckDB.DBInterface.execute(conn, sqlquery)
+success, rows = CBit.create_bd_9ac_l_form_a64(save_path, conn)
+@info "Step 4 completed" success rows
 
 ## Step 5: Create sbs_na_sca_a64 from sbs_na_sca_r2
 sqlquery = "COPY (WITH sbs AS ( " *

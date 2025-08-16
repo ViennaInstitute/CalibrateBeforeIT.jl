@@ -56,13 +56,14 @@ function get_eurostat_table_ids()
     return copy(ALL_EUROSTAT_TABLE_IDS)
 end
 
+global save_path = "data/010_eurostat_tables"
+
 include("utils.jl")
 include("import_eurostat.jl")
 include("import_figaro_data.jl")
 include("import_data.jl")
 include("import_calibration_data.jl")
 include("get_params_and_initial_conditions.jl")
-
-global save_path = "data/010_eurostat_tables"
+include("r2_to_nace64_conversion.jl")
 
 end # module CalibrateBeforeIT
