@@ -19,7 +19,7 @@ all_eurostat_table_ids = CBit.get_eurostat_table_ids()
 println(all_eurostat_table_ids)
 
 # Test on a single table
-result = CBit.download_to_parquet("bd_9ac_l_form_r2", save_path; use_cached_tsv=false)
+result = CBit.download_to_parquet("sbs_na_sca_r2", save_path; use_cached_tsv=false)
 println(result)
 
 # Download all tables
@@ -45,7 +45,6 @@ CBit.write_table(joinpath(save_path, "$(table_id).parquet"),
 ## append them onto each other and save them again as a .parquet file.
 result_figaro = CBit.combine_figaro_tables(save_path; conn=conn, skip_if_missing=false)
 @info "FIGARO combination result: $(result_figaro.output_file)"
-
 
 
 ## Step 4: Create bd_9ac_l_form_a64 from bd_9ac_l_form_r2
