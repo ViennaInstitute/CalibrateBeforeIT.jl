@@ -1,2 +1,5 @@
 /data/010_eurostat_tables/*.parquet
 /data/010_eurostat_tables/*.tsv
+
+# mac files
+.DS_Store
