@@ -1,2 +1,9 @@
 /data/010_eurostat_tables/*.parquet
 /data/010_eurostat_tables/*.tsv
+
+# data in test folder
+/test/data/010_eurostat_tables/*.parquet
+/test/data/010_eurostat_tables/*.tsv
+
+# mac files
+.DS_Store
