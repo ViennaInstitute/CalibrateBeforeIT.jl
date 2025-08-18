@@ -77,4 +77,6 @@ calibration process. The following steps are carried out:
 
 # References
 
+Glielmo, A., Devetak, M., Meligrana, A., & Poledna, S. (2025). BeforeIT. jl: High-Performance Agent-Based Macroeconomics Made Easy. arXiv preprint arXiv:2502.13267. https://doi.org/10.48550/arXiv.2502.13267
+
 Poledna, S., Miess, M. G., Hommes, C., & Rabitsch, K. (2023). Economic forecasting with an agent-based model. European Economic Review, 151, 104306. https://doi.org/10.1016/j.euroecorev.2022.104306
