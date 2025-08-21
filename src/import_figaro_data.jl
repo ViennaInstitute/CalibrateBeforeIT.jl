@@ -5,20 +5,30 @@
 # using Tables
 # using ..Utils
 
+function get_minmax_calibration_years(geo)
+    conn = DBInterface.connect(DuckDB.DB)
+    sqlquery = "SELECT min(time) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND ind_use IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U'))"
+    min_year = parse(Int64, execute(conn,sqlquery)[1])
+    sqlquery = "SELECT max(time) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND ind_use IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U'))"
+    max_year = parse(Int64, execute(conn,sqlquery)[1])
+    return (min_year, max_year)
+end
 
 function import_figaro_data(geo,
                             start_calibration_year, end_calibration_year,
-                            number_sectors, number_years)
+                            number_sectors)
     conn = DBInterface.connect(DuckDB.DB)
+    number_years = end_calibration_year - start_calibration_year + 1;
     all_years = collect(start_calibration_year:end_calibration_year)
     years_str = join(["'$(year)'" for year in all_years], ", ")
 
     figaro = Dict()
 
-    # % time series
-    # sqlquery=['SELECT sum(value) FROM naio_10_fcp_ii1 WHERE c_dest=',geo,' AND ind_ava IN (SELECT nace_figaro FROM nace64 WHERE nace NOT IN (''L68A'', ''T'', ''U'')) AND ind_use IN (SELECT nace_figaro FROM nace64 WHERE nace NOT IN (''L68A'', ''T'', ''U'')) AND time IN (',years_str,') GROUP BY time, ind_use, ind_ava ORDER BY time, ind_use, ind_ava'];
-    # figaro.intermediate_consumption=fetch(conn,sqlquery,'DataReturnFormat','numeric');
-    # figaro.intermediate_consumption=reshape(figaro.intermediate_consumption,number_sectors,number_sectors,number_years);
+    ## For debugging: Add more columns to the SELECT statment, parse everything
+    ## to a DataFrame to be able to query and inspect that dataframe:
+    # sqlquery="SELECT time, ind_use, ind_ava, sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND ind_use IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_use, ind_ava ORDER BY time, ind_use, ind_ava";
+    # res = DataFrame(columntable(DBInterface.execute(conn, sqlquery)))
+    # combine(groupby(res, [:time]), nrow => :count) ## number of rows by 'time'
 
     sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_ava IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND ind_use IN (SELECT nace_figaro FROM '$(pqfile("nace64"))' WHERE nace NOT IN ('L68A', 'T', 'U')) AND time IN ($(years_str)) GROUP BY time, ind_use, ind_ava ORDER BY time, ind_use, ind_ava";
     figaro["intermediate_consumption"]=execute(conn,sqlquery, (number_sectors, number_sectors, number_years));

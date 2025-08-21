@@ -34,13 +34,14 @@ start_year = 1996
 end_year = 2024
 
 ## For `import_figaro_data`:
-start_calibration_year = 2010;
-end_calibration_year = 2022; # the last year for which there are IO tables
 max_calibration_date = CBit.DateTime(2020, 12, 31)
 estimation_date = CBit.DateTime(1996, 12, 31)
-number_years = end_calibration_year - start_calibration_year + 1;
-number_quarters = number_years*4;
 number_sectors = 62;
+
+# start_calibration_year = 2010;
+# end_calibration_year = 2021; # the last year for which there are IO tables
+# number_quarters = number_years*4;
+
 ## all countries:
 ## geo=["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK"]
 ## countries excluding the non-working ones:
@@ -48,7 +49,7 @@ number_sectors = 62;
 ## countries whose data is available until 2023 (additionally excludes DK, HR)
 # all_countries=["AT", "BE", "BG", "CY", "CZ", "DE", "EE", "EL", "ES", "FI", "FR", "HU", "IE", "IT", "LV", "NL", "PL", "PT", "RO", "SI", "SK"]
 # all_countries=["FR", "HU", "IE", "IT", "LV", "NL", "PL", "PT", "RO", "SI", "SK"]
-all_countries=["AT"]
+all_countries=["AT", "IT", "NL"]
 
 
 ## This step does the same queries as step 5 with import_data(), but with geo ==
@@ -61,10 +62,13 @@ geo = country = "AT"
 for geo in all_countries
     @info geo
 
+    start_calibration_year, end_calibration_year = CBit.get_minmax_calibration_years(geo)
+
     ##------------------------------------------------------------
     ## Step 5: "Import figaro": Input-Output data and other indicators
-    ctry_figaro = CBit.import_figaro_data(geo, start_calibration_year, end_calibration_year,
-                                          number_sectors, number_years)
+    ctry_figaro = CBit.import_figaro_data(geo, start_calibration_year,
+                                          end_calibration_year,
+                                          number_sectors)
 
 
     ##------------------------------------------------------------
@@ -85,7 +89,7 @@ for geo in all_countries
     ## Step 8: Calculate the initial conditions and parameters
     for calibration_year in start_calibration_year:end_calibration_year
         for calibration_quarter in [3, 6, 9, 12]
-            @info calibration_year calibration_quarter
+            @info "Calibrating $(geo) year=$(calibration_year) month=$(calibration_quarter)"
             calibration_date = CBit.DateTime(calibration_year, calibration_quarter,
                                              calibration_quarter in [3, 12] ? 31 : 30);
 
