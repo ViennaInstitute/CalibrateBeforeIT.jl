@@ -8,7 +8,7 @@ function pqfile(table_id)
     joinpath(save_path, "$(table_id).parquet")
 end
 
-# Database query utilities  
+# Database query utilities
 function execute(conn, query)
     # Execute SQL query and return first column as vector
     res = values(columntable(DBInterface.execute(conn, query)))[1]
@@ -41,7 +41,7 @@ date2num(year::Int64, month::Int64, day::Int64) = date2num(DateTime(year, month,
 date2num_yearly(years_range::UnitRange) = [date2num(this_year, 12, 31) for this_year in years_range]
 date2num_quarterly(years_range::UnitRange) = reduce(vcat, [[date2num(this_year, 3, 31), date2num(this_year, 6, 30), date2num(this_year, 9, 30), date2num(this_year, 12, 31)] for this_year in years_range])
 
-# MATLAB epoch for date conversions  
+# MATLAB epoch for date conversions
 const MATLAB_EPOCH = Dates.DateTime(-1, 12, 31)
 # Convert MATLAB date number back to DateTime
 num2date(n::Number) = MATLAB_EPOCH + Dates.Millisecond(round(Int64, n * 1000 * 60 * 60 * 24))
