@@ -14,27 +14,35 @@ shared with us. To ease the accessability of this work, we translated
 the scripts to Julia. The only prerequisite for this repository is
 Julia, there are no outside (technical) dependencies.
 
-# Instantiating the project
+# Installation
 
-Either run the script `00_instantiate_project.jl` in the root folder.
-Alternatively, go to `models/MultiIndustry_ABM/`, start julia and
-type:
+To be able to use the package, you can activate a new Julia
+environment in any folder from the terminal by typing
 
-``` julia
-]activate .
-instantiate
+```
+julia --project=.
 ```
 
-This will install all needed packages and their dependencies.
+Then, whithin the Julia environment, you can install CalibrateBeforeIT.jl as
+
+```julia
+using Pkg
+Pkg.add(url = "https://github.com/ViennaInstitute/CalibrateBeforeIT.jl")
+```
+
+You can ensure to have installed all dependencies via
+
+```julia
+Pkg.instantiate()
+```
+
+Now you should be able to run the example code scripts described just
+below.
 
 Aside: `]` enters the "pkg" mode where you can make changes to the
 needed package dependencies by this project. Press `backspace` to
 return to normal "julia" mode. Equivalently, `?` is for help mode, `;`
 for shell mode.
-
-These commands (or this script) are only necessary when you are
-instantiating the project for the first time, or packages have been
-updated (done only rarely).
 
 # Example usage
 
