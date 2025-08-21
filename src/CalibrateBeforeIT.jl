@@ -12,8 +12,9 @@ using StatsBase ## only for cov in get_params_and_initial_conditions
 # Eurostat table IDs required for calibration
 const ALL_EUROSTAT_TABLE_IDS = [
     "naio_10_fcp_ii1",
-    "naio_10_fcp_ii2", 
+    "naio_10_fcp_ii2",
     "naio_10_fcp_ii3",
+    "naio_10_fcp_ii4",
     "nama_10_gdp",
     "namq_10_gdp",
     "irt_st_q",

@@ -355,9 +355,10 @@ Base.showerror(io::IO, e::ProcessingError) = print(io, "ProcessingError: ", e.me
 Combine the three FIGARO Input-Output tables into a single table.
 
 Eurostat splits the FIGARO IO tables into three separate tables by time periods:
-- naio_10_fcp_ii1: 2010-2014 
-- naio_10_fcp_ii2: 2015-2019
-- naio_10_fcp_ii3: 2020 onwards
+- naio_10_fcp_ii1: 2010-2013
+- naio_10_fcp_ii2: 2014-2017
+- naio_10_fcp_ii3: 2018-2021
+- naio_10_fcp_ii4: 2022 onwards
 
 This function appends them into one table for efficient querying.
 
@@ -385,7 +386,8 @@ end
 """
 function combine_figaro_tables(save_path::String; 
                               conn=nothing,
-                              input_tables=["naio_10_fcp_ii1", "naio_10_fcp_ii2", "naio_10_fcp_ii3"],
+                              input_tables=["naio_10_fcp_ii1", "naio_10_fcp_ii2",
+                                            "naio_10_fcp_ii3", "naio_10_fcp_ii4"],
                               output_table="naio_10_fcp_ii",
                               skip_if_missing=true)
     
