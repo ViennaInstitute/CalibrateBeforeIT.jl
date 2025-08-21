@@ -188,10 +188,10 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
               ") foo ORDER BY time, nace_r2"
     #     'UNION " ...
     #     'SELECT time, nace_r2, 1e2*value AS value FROM '$(pqfile("nama_10_a64_e"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND unit = 'THS_PER' AND na_item='SAL_DC' AND nace_r2 IN ('A01','A02','A03','O') " ...
-    x1=execute(conn,sqlquery);
     calibration_data["firms"]=execute(conn,sqlquery);
-    calibration_data["firms"]=reshape(calibration_data["firms"],(number_sectors,Int64(length(calibration_data["firms"])/number_sectors)));
-    calibration_data["firms"][ismissing.(calibration_data["firms"])]=round.(calibration_data["employees"][:, 1:11][ismissing.(calibration_data["firms"])]/10);
+    number_firm_years = Int64(length(calibration_data["firms"])/number_sectors)
+    calibration_data["firms"]=reshape(calibration_data["firms"],(number_sectors,number_firm_years));
+    calibration_data["firms"][ismissing.(calibration_data["firms"])]=round.(calibration_data["employees"][:, 1:number_firm_years][ismissing.(calibration_data["firms"])]/10);
 
     ## TODO there should be a better way to fix this:
     if geo=="BE"
