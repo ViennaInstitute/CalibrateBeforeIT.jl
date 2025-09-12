@@ -15,11 +15,25 @@ function execute(conn, query)
     return res
 end
 
+# Database query utilities -- debug version
+function execute_debug(conn, query)
+    # Execute SQL query and return a DataFrame
+    res = DataFrame(columntable(DBInterface.execute(conn, sqlquery)))
+    return res
+end
+
 function execute(conn, query, dims)
     # Execute SQL query and reshape result to specified dimensions
     raw_res = execute(conn, query)
     res = reshape(raw_res, dims)
     return res
+end
+
+function extract_years(conn, table_id::String, start_calibration_year)
+    sqlquery = "SELECT DISTINCT time FROM '$(pqfile(table_id))' ORDER BY time"
+    res_years = parse.(Int64, execute(conn,sqlquery))
+    filter!(x -> x >= start_calibration_year, res_years)
+    return res_years
 end
 
 using Interpolations
@@ -40,6 +54,8 @@ date2num(d::Dates.DateTime) = Int64(Dates.value(d - MATLAB_EPOCH) / (1000 * 60 *
 date2num(year::Int64, month::Int64, day::Int64) = date2num(DateTime(year, month, day))
 date2num_yearly(years_range::UnitRange) = [date2num(this_year, 12, 31) for this_year in years_range]
 date2num_quarterly(years_range::UnitRange) = reduce(vcat, [[date2num(this_year, 3, 31), date2num(this_year, 6, 30), date2num(this_year, 9, 30), date2num(this_year, 12, 31)] for this_year in years_range])
+
+create_year_array_str(all_years) = join(["'$(year)'" for year in all_years], ", ")
 
 # MATLAB epoch for date conversions
 const MATLAB_EPOCH = Dates.DateTime(-1, 12, 31)

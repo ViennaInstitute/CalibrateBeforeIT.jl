@@ -35,7 +35,9 @@ const ALL_EUROSTAT_TABLE_IDS = [
     "nama_10_an6",
     "nama_10_a64_e",
     "sbs_na_sca_r2",
-    "bd_9ac_l_form_r2"
+    "sbs_ovw_act",
+    "bd_9ac_l_form_r2",
+    "bd_l_form"
 ]
 
 """

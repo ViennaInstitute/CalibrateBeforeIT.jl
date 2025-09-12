@@ -43,13 +43,11 @@ number_sectors = 62;
 # number_quarters = number_years*4;
 
 ## all countries:
-## geo=["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK"]
+# all_countries=["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK"]
+
 ## countries excluding the non-working ones:
-## geo=["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR", "HU", "IE", "IT", "LV", "NL", "PL", "PT", "RO", "SI", "SK"]
-## countries whose data is available until 2023 (additionally excludes DK, HR)
-# all_countries=["AT", "BE", "BG", "CY", "CZ", "DE", "EE", "EL", "ES", "FI", "FR", "HU", "IE", "IT", "LV", "NL", "PL", "PT", "RO", "SI", "SK"]
-# all_countries=["FR", "HU", "IE", "IT", "LV", "NL", "PL", "PT", "RO", "SI", "SK"]
-all_countries=["AT", "IT", "NL"]
+# not_working=["BG", "CY", "EE", "ES", "FR", "HR", "HU", "IE", "LT", "LU", "MT", "PL", "PT", "RO", "SE", ]
+all_countries=["AT", "BE", "CZ", "DE", "DK", "EL", "FI", "IT", "LV", "NL", "SI", "SK"]
 
 
 ## This step does the same queries as step 5 with import_data(), but with geo ==
@@ -65,19 +63,19 @@ for geo in all_countries
     start_calibration_year, end_calibration_year = CBit.get_minmax_calibration_years(geo)
 
     ##------------------------------------------------------------
-    ## Step 5: "Import figaro": Input-Output data and other indicators
+    @info "Step 5: 'Import figaro': Input-Output data and other indicators"
     ctry_figaro = CBit.import_figaro_data(geo, start_calibration_year,
                                           end_calibration_year,
                                           number_sectors)
 
 
     ##------------------------------------------------------------
-    ## Step 6: "Import data": GDP, GVA, Consumption time series
+    @info "Step 6: 'Import data': GDP, GVA, Consumption time series"
     ctry_data = CBit.import_data(geo, start_year, end_year)
 
 
     ##------------------------------------------------------------
-    ## Step 7: "Import calibration data"
+    @info "Step 7: 'Import calibration data'"
     ctry_calibration_data = CBit.import_calibration_data(geo,
                                                          start_calibration_year,
                                                          end_calibration_year,
@@ -86,8 +84,9 @@ for geo in all_countries
 
 
     ##------------------------------------------------------------
-    ## Step 8: Calculate the initial conditions and parameters
+    @info "Step 8: Calculate the initial conditions and parameters"
     for calibration_year in start_calibration_year:end_calibration_year
+    # for calibration_year in 2024:2024
         for calibration_quarter in [3, 6, 9, 12]
             @info "Calibrating $(geo) year=$(calibration_year) month=$(calibration_quarter)"
             calibration_date = CBit.DateTime(calibration_year, calibration_quarter,

@@ -47,12 +47,21 @@ result_figaro = CBit.combine_figaro_tables(save_path; conn=conn, skip_if_missing
 @info "FIGARO combination result: $(result_figaro.output_file)"
 
 
+##------------------------------------------------------------
 ## Step 4: Create bd_9ac_l_form_a64 from bd_9ac_l_form_r2
-success, rows = CBit.create_bd_9ac_l_form_a64(save_path, conn)
+success, rows = CBit.create_business_demographic_a64_data("bd_9ac_l_form_r2",
+    save_path, conn)
+success, rows = CBit.create_business_demographic_a64_data("bd_l_form",
+    save_path, conn)
 @info "Step 4 completed" success rows
 
+
+##------------------------------------------------------------
 ## Step 5: Create sbs_na_sca_a64 from sbs_na_sca_r2
-success, rows = CBit.create_sbs_na_sca_a64(save_path, conn)
+success, rows = CBit.create_enterprise_statistics_a64_data("sbs_na_sca_r2",
+    save_path, conn)
+success, rows = CBit.create_enterprise_statistics_a64_data("sbs_ovw_act",
+    save_path, conn)
 @info "Step 5 completed" success rows
 
 

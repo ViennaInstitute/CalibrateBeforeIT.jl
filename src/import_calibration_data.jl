@@ -7,12 +7,12 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     all_years = collect(start_calibration_year:end_calibration_year)
     number_years=end_calibration_year-start_calibration_year + 1;
     number_quarters=number_years*4;
-    years_str = join(["'$(year)'" for year in all_years], ", ")
     ## Create a year-quarter vector and string for creating a data.frame and for SQL
     ## queries
+    years_str = create_year_array_str(all_years)
     all_quarters = ["Q1", "Q2", "Q3", "Q4"]
     quarters_vec = ["$(year)-$(quarter)" for year in all_years for quarter in all_quarters]
-    quarters_str = join(["'$(yearquarter)'" for yearquarter in quarters_vec], ",")
+    quarters_str = create_year_array_str(quarters_vec)
 
     calibration_data = Dict()
 
@@ -177,19 +177,71 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     calibration_data["employees"]=reshape(calibration_data["employees"],(number_sectors,Int64(length(calibration_data["employees"])/number_sectors)));
     calibration_data["employees"]=coalesce.(calibration_data["employees"],100);
 
-    ## NOTE sbs_na_sca_r2 is only up until 2020.
+    ## sbs_ovw_act is a prolongation of the sbs_na_sca_r2 dataset, and bd_l_form
+    ## is that of bd_9ac_l_form, so we use these two datasets to extend the
+    ## timeframe of firm population data.
 
-    ## TODO check which data sources could be used to extend the timeframe
+    ## Query which years are in respective data sources
+    sbs_na_sca_r2_years = extract_years(conn, "sbs_na_sca_r2_a64", start_calibration_year);
+    sbs_ovw_act_years = extract_years(conn, "sbs_ovw_act_a64", start_calibration_year);
+    bd_9ac_l_form_r2_years = extract_years(conn, "bd_9ac_l_form_r2_a64", start_calibration_year);
+    bd_l_form_years = extract_years(conn, "bd_l_form_a64", start_calibration_year);
 
-    sqlquery="SELECT value FROM (" *
-              "SELECT time, nace_r2, value AS value FROM '$(pqfile("sbs_na_sca_a64"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND indic_sb='V11110' AND nace_r2 NOT IN ('K64','K65','K66','P','Q86','Q87_Q88','R90-R92','R93','S94','S95','S96') " *
-              "UNION " *
-              "SELECT time, nace_r2, value AS value FROM '$(pqfile("bd_9ac_l_form_a64"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND indic_sb='V11910' AND leg_form='TOTAL' AND nace_r2 IN ('K64','K65','K66','P','Q86','Q87_Q88','R90-R92','R93','S94','S95','S96')" *
-              ") foo ORDER BY time, nace_r2"
+    ## Make sure that only extract data up until the last year that is available
+    ## in both datasets
+    latest_year_fully_available = min(maximum(bd_l_form_years), maximum(sbs_ovw_act_years))
+    filter!(x -> x <= latest_year_fully_available, bd_l_form_years)
+    filter!(x -> x <= latest_year_fully_available, sbs_ovw_act_years)
+
+    # Create variable `sbs_na_sca_r2_years_str` that only contains those years
+    # that are not in sbs_ovw_act
+    sbs_na_sca_r2_years = setdiff(sbs_na_sca_r2_years, sbs_ovw_act_years)
+    sbs_ovw_act_years_str = create_year_array_str(sbs_ovw_act_years)
+    sbs_na_sca_r2_years_str = create_year_array_str(sbs_na_sca_r2_years)
+
+    ## For bd_* datasets, we do it the other way round: we source all years from
+    ## bd_9ac_* first, then take the rest from bd_l_form.
+    bd_l_form_years = setdiff(bd_l_form_years, bd_9ac_l_form_r2_years)
+    bd_l_form_years_str = create_year_array_str(bd_l_form_years)
+    bd_9ac_l_form_r2_years_str = create_year_array_str(bd_9ac_l_form_r2_years)
+
+    ## Select only the relevant years from each of the datasets and append them
+    ## to each other
+    nace_r2_industries_subset = "('K64','K65','K66','P','Q86','Q87_Q88','R90-R92','R93','S94','S95','S96')"
+    # "SELECT time, nace_r2, value FROM (
+    sqlquery= """
+    SELECT value FROM (
+    SELECT time, nace_r2, value AS value FROM '$(pqfile("sbs_na_sca_r2_a64"))'
+    WHERE time IN ($(sbs_na_sca_r2_years_str)) AND geo='$(geo)'
+    AND indic_sb='V11110' AND nace_r2 NOT IN $(nace_r2_industries_subset)
+    UNION
+    SELECT time, nace_r2, value AS value FROM '$(pqfile("sbs_ovw_act_a64"))'
+    WHERE time IN ($(sbs_ovw_act_years_str)) AND geo='$(geo)'
+    AND indic_sbs='ENT_NR' AND nace_r2 NOT IN $(nace_r2_industries_subset)
+    UNION
+    SELECT time, nace_r2, value AS value FROM '$(pqfile("bd_9ac_l_form_r2_a64"))'
+    WHERE time IN ($(bd_9ac_l_form_r2_years_str)) AND geo='$(geo)'
+    AND indic_sb='V11910' AND leg_form='TOTAL' AND nace_r2 IN $(nace_r2_industries_subset)
+    UNION
+    SELECT time, nace_r2, value AS value FROM '$(pqfile("bd_l_form_a64"))'
+    WHERE time IN ($(bd_l_form_years_str)) AND geo='$(geo)'
+    AND indic_sbs='ENT_NR' AND leg_form='TOTAL' AND nace_r2 IN $(nace_r2_industries_subset)
+    ) foo ORDER BY time, nace_r2
+    """
+
     #     'UNION " ...
-    #     'SELECT time, nace_r2, 1e2*value AS value FROM '$(pqfile("nama_10_a64_e"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND unit = 'THS_PER' AND na_item='SAL_DC' AND nace_r2 IN ('A01','A02','A03','O') " ...
+    #     'SELECT time, nace_r2, 1e2*value AS value FROM '$(pqfile("nama_10_a64_e"))' WHERE time IN ($(years_str))
+    #     AND geo='$(geo)' AND unit = 'THS_PER' AND na_item='SAL_DC' AND nace_r2 IN ('A01','A02','A03','O') " ...
+    # x1=execute_debug(conn,sqlquery);
+    # res = combine(groupby(x1, [:nace_r2]), nrow => :count) ## number of rows by 'nace_r2'
+    # x1[x1.nace_r2 .== "K64", :]
+    # x1[x1.nace_r2 .== "L", :]
+    # x2=unstack(x1, :nace_r2, :time, :value)
+    # x2[:, [20, 21]]
+
     calibration_data["firms"]=execute(conn,sqlquery);
-    number_firm_years = Int64(length(calibration_data["firms"])/number_sectors)
+    number_firm_years = union(union(sbs_na_sca_r2_years, sbs_ovw_act_years),
+        union(bd_9ac_l_form_r2_years, bd_l_form_years)) |> length
     calibration_data["firms"]=reshape(calibration_data["firms"],(number_sectors,number_firm_years));
     calibration_data["firms"][ismissing.(calibration_data["firms"])]=round.(calibration_data["employees"][:, 1:number_firm_years][ismissing.(calibration_data["firms"])]/10);
 
