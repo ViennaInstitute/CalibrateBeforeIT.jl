@@ -90,15 +90,17 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
             sum((fixed_assets_eu7 - dwellings_eu7) ./ nominal_nace64_output_eu7 .* output)
     end
 
-    gross_capitalformation_dwellings = calibration_data["gross_capitalformation_dwellings"][T_calibration]
-    nace64_capital_consumption = calibration_data["nace64_capital_consumption"][:, T_calibration]
-    nominal_nace64_output = calibration_data["nominal_nace64_output"][:, T_calibration]
+    # ## OR [2025-09-15 Mo]: capital_consumption is already computed in
+    # ## `import_calibration_data` (for all years), so not necessary to do here
+    # ## again. Instead, we just extract the correct year-vector from the
+    # ## capital-consumption-matrix.
+    capital_consumption = calibration_data["capital_consumption"][:, T_calibration]
     unemployment_rate_quarterly = data["unemployment_rate_quarterly"][T_calibration_exo]
-    capital_consumption = nace64_capital_consumption ./ nominal_nace64_output .* output
     operating_surplus = operating_surplus - capital_consumption
     taxes_products_export = 0 # TODO: unelegant hard coded zero
     employers_social_contributions = min(social_contributions, sum(compensation_employees) - wages)
     fixed_capitalformation = Bit.pos(fixed_capitalformation)
+    gross_capitalformation_dwellings = calibration_data["gross_capitalformation_dwellings"][T_calibration]
     taxes_products_capitalformation_dwellings =
         gross_capitalformation_dwellings *
         (1 - 1 / (1 + taxes_products_fixed_capitalformation / sum(fixed_capitalformation)))
