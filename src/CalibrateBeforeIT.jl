@@ -60,6 +60,7 @@ function get_eurostat_table_ids()
 end
 
 global eurostat_path = "data/010_eurostat_tables"
+global calibration_output_path = "data/020_calibration_output"
 
 include("utils.jl")
 include("import_eurostat.jl")
