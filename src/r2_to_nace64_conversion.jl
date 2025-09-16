@@ -9,7 +9,7 @@ used by economic models like BeforeIT.jl.
 using DuckDB
 
 """
-    create_business_demographic_a64_data(save_path::String, conn;
+    create_business_demographic_a64_data(eurostat_path::String, conn;
                             excluded_industries::Vector{String} = ["L68A", "T", "U"])
 
 Convert business demography data from NACE Rev.2 to NACE64 classification.
@@ -21,16 +21,16 @@ Creates `bd_9ac_l_form_r2_a64.parquet` from `bd_9ac_l_form_r2.parquet` by:
 4. Filling gaps with NULL values for missing combinations
 
 # Arguments
-- `save_path::String`: Directory containing input/output Parquet files
+- `eurostat_path::String`: Directory containing input/output Parquet files
 - `conn`: DuckDB database connection
 - `excluded_industries::Vector{String}`: NACE64 industries to exclude from output
 
 # Files Required
-- `$(save_path)/nace64.parquet`: Industry classification mapping table
-- `$(save_path)/bd_9ac_l_form_r2.parquet`: Input business demography data
+- `$(eurostat_path)/nace64.parquet`: Industry classification mapping table
+- `$(eurostat_path)/bd_9ac_l_form_r2.parquet`: Input business demography data
 
 # Files Created
-- `$(save_path)/bd_9ac_l_form_r2_a64.parquet`: Output data in NACE64 format
+- `$(eurostat_path)/bd_9ac_l_form_r2_a64.parquet`: Output data in NACE64 format
 
 # Returns
 - `(success::Bool, rows_processed::Int)`: Processing status and row count
@@ -39,18 +39,18 @@ Creates `bd_9ac_l_form_r2_a64.parquet` from `bd_9ac_l_form_r2.parquet` by:
 ```julia
 using DuckDB
 conn = DBInterface.connect(DuckDB.DB)
-save_path = "data/010_eurostat_tables"
-success, rows = create_business_demographic_a64_data(save_path, conn)
+eurostat_path = "data/010_eurostat_tables"
+success, rows = create_business_demographic_a64_data(eurostat_path, conn)
 ```
 """
 function create_business_demographic_a64_data(table_id::String,
-    save_path::String, conn;
+    eurostat_path::String, conn;
     excluded_industries::Vector{String} = ["L68A", "T", "U"])
 
     # Input validation
-    nace64_file = joinpath(save_path, "nace64.parquet")
-    input_file = joinpath(save_path, "$(table_id).parquet")
-    output_file = joinpath(save_path, "$(table_id)_a64.parquet")
+    nace64_file = joinpath(eurostat_path, "nace64.parquet")
+    input_file = joinpath(eurostat_path, "$(table_id).parquet")
+    output_file = joinpath(eurostat_path, "$(table_id)_a64.parquet")
 
     if !isfile(nace64_file)
         throw(ArgumentError("NACE64 mapping file not found: $nace64_file"))
@@ -118,7 +118,7 @@ function create_business_demographic_a64_data(table_id::String,
 end
 
 """
-    create_enterprise_statistics_a64_data(save_path::String, conn;
+    create_enterprise_statistics_a64_data(eurostat_path::String, conn;
                           excluded_industries::Vector{String} = ["L68A", "T", "U"])
 
 Convert structural business statistics data from NACE Rev.2 to NACE64 classification.
@@ -130,16 +130,16 @@ Creates `sbs_na_sca_a64.parquet` from `sbs_na_sca_r2.parquet` by:
 4. Filling gaps with NULL values for missing combinations
 
 # Arguments
-- `save_path::String`: Directory containing input/output Parquet files
+- `eurostat_path::String`: Directory containing input/output Parquet files
 - `conn`: DuckDB database connection
 - `excluded_industries::Vector{String}`: NACE64 industries to exclude from output
 
 # Files Required
-- `$(save_path)/nace64.parquet`: Industry classification mapping table
-- `$(save_path)/sbs_na_sca_r2.parquet`: Input structural business statistics data
+- `$(eurostat_path)/nace64.parquet`: Industry classification mapping table
+- `$(eurostat_path)/sbs_na_sca_r2.parquet`: Input structural business statistics data
 
 # Files Created
-- `$(save_path)/sbs_na_sca_a64.parquet`: Output data in NACE64 format
+- `$(eurostat_path)/sbs_na_sca_a64.parquet`: Output data in NACE64 format
 
 # Returns
 - `(success::Bool, rows_processed::Int)`: Processing status and row count
@@ -148,17 +148,17 @@ Creates `sbs_na_sca_a64.parquet` from `sbs_na_sca_r2.parquet` by:
 ```julia
 using DuckDB
 conn = DBInterface.connect(DuckDB.DB)
-save_path = "data/010_eurostat_tables"
-success, rows = create_enterprise_statistics_a64_data(save_path, conn)
+eurostat_path = "data/010_eurostat_tables"
+success, rows = create_enterprise_statistics_a64_data(eurostat_path, conn)
 ```
 """
-function create_enterprise_statistics_a64_data(table_id::String, save_path::String, conn;
+function create_enterprise_statistics_a64_data(table_id::String, eurostat_path::String, conn;
     excluded_industries::Vector{String} = ["L68A", "T", "U"])
 
     # Input validation
-    nace64_file = joinpath(save_path, "nace64.parquet")
-    input_file = joinpath(save_path, "$(table_id).parquet")
-    output_file = joinpath(save_path, "$(table_id)_a64.parquet")
+    nace64_file = joinpath(eurostat_path, "nace64.parquet")
+    input_file = joinpath(eurostat_path, "$(table_id).parquet")
+    output_file = joinpath(eurostat_path, "$(table_id)_a64.parquet")
 
     if !isfile(nace64_file)
         throw(ArgumentError("NACE64 mapping file not found: $nace64_file"))

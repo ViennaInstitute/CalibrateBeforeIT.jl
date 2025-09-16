@@ -5,7 +5,7 @@
 # File path utilities
 function pqfile(table_id)
     # Generate parquet file path from table ID
-    joinpath(save_path, "$(table_id).parquet")
+    joinpath(eurostat_path, "$(table_id).parquet")
 end
 
 # Database query utilities

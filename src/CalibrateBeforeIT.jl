@@ -59,7 +59,7 @@ function get_eurostat_table_ids()
     return copy(ALL_EUROSTAT_TABLE_IDS)
 end
 
-global save_path = "data/010_eurostat_tables"
+global eurostat_path = "data/010_eurostat_tables"
 
 include("utils.jl")
 include("import_eurostat.jl")

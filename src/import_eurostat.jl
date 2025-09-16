@@ -40,7 +40,7 @@ function transform_columns(df, cols)
 end
 
 """
-    download_to_parquet(table_id::String, save_path::String;
+    download_to_parquet(table_id::String, eurostat_path::String;
                        use_cached_tsv::Bool = false,
                        timeout::Int = 300,
                        retry_attempts::Int = 3) -> NamedTuple
@@ -52,7 +52,7 @@ formatting flags, and saves it as a Parquet file for efficient querying.
 
 # Arguments
 - `table_id::String`: Eurostat table identifier (e.g., "nama_10_gdp")
-- `save_path::String`: Directory path where files will be saved
+- `eurostat_path::String`: Directory path where files will be saved
 - `use_cached_tsv::Bool`: If true, skip download if TSV file already exists (default: false)
 - `timeout::Int`: Download timeout in seconds (default: 300)
 - `retry_attempts::Int`: Number of download retry attempts (default: 3)
@@ -67,7 +67,7 @@ formatting flags, and saves it as a Parquet file for efficient querying.
   - `processing_time::Float64`: Processing time in seconds
 
 # Throws
-- `ArgumentError`: If table_id is invalid or save_path cannot be created
+- `ArgumentError`: If table_id is invalid or eurostat_path cannot be created
 - `DownloadError`: If download fails after all retry attempts
 - `ProcessingError`: If data processing fails
 
@@ -77,24 +77,24 @@ result = download_to_parquet("nama_10_gdp", "data/eurostat")
 println("Downloaded ", result.rows_processed, " rows to ", result.parquet_path)
 ```
 """
-function download_to_parquet(table_id::String, save_path::String;
+function download_to_parquet(table_id::String, eurostat_path::String;
                             use_cached_tsv::Bool = false,
                             timeout::Int = 300,
                             retry_attempts::Int = 3)
 
     # Input validation
-    validate_download_inputs(table_id, save_path, timeout, retry_attempts)
+    validate_download_inputs(table_id, eurostat_path, timeout, retry_attempts)
 
     # Ensure save directory exists
     try
-        mkpath(save_path)
+        mkpath(eurostat_path)
     catch e
         throw(ArgumentError("Cannot create save directory '$save_path': $e"))
     end
 
     # File paths
-    tsv_filename = joinpath(save_path, "$(table_id).tsv")
-    parquet_filename = joinpath(save_path, "$(table_id).parquet")
+    tsv_filename = joinpath(eurostat_path, "$(table_id).tsv")
+    parquet_filename = joinpath(eurostat_path, "$(table_id).parquet")
 
     # Download phase
     download_time = @elapsed begin
@@ -131,11 +131,11 @@ function download_to_parquet(table_id::String, save_path::String;
 end
 
 """
-    validate_download_inputs(table_id, save_path, timeout, retry_attempts)
+    validate_download_inputs(table_id, eurostat_path, timeout, retry_attempts)
 
 Validate inputs for download_to_parquet function.
 """
-function validate_download_inputs(table_id::String, save_path::String, timeout::Int, retry_attempts::Int)
+function validate_download_inputs(table_id::String, eurostat_path::String, timeout::Int, retry_attempts::Int)
     # Validate table_id
     if isempty(strip(table_id))
         throw(ArgumentError("table_id cannot be empty"))
@@ -146,9 +146,9 @@ function validate_download_inputs(table_id::String, save_path::String, timeout::
         throw(ArgumentError("table_id '$table_id' contains invalid characters (only letters, numbers, and underscores allowed)"))
     end
 
-    # Validate save_path
-    if isempty(strip(save_path))
-        throw(ArgumentError("save_path cannot be empty"))
+    # Validate eurostat_path
+    if isempty(strip(eurostat_path))
+        throw(ArgumentError("eurostat_path cannot be empty"))
     end
 
     # Validate timeout
@@ -346,7 +346,7 @@ Base.showerror(io::IO, e::DownloadError) = print(io, "DownloadError: ", e.messag
 Base.showerror(io::IO, e::ProcessingError) = print(io, "ProcessingError: ", e.message)
 
 """
-    combine_figaro_tables(save_path::String;
+    combine_figaro_tables(eurostat_path::String;
                          conn=nothing,
                          input_tables=["naio_10_fcp_ii1", "naio_10_fcp_ii2", "naio_10_fcp_ii3"],
                          output_table="naio_10_fcp_ii",
@@ -363,7 +363,7 @@ Eurostat splits the FIGARO IO tables into three separate tables by time periods:
 This function appends them into one table for efficient querying.
 
 # Arguments
-- `save_path::String`: Directory containing the Parquet files
+- `eurostat_path::String`: Directory containing the Parquet files
 - `conn`: DuckDB connection (optional, will create if not provided)
 - `input_tables::Vector{String}`: Names of input tables to combine (default: FIGARO tables)
 - `output_table::String`: Name of the combined output table (default: "naio_10_fcp_ii")
@@ -375,8 +375,8 @@ This function appends them into one table for efficient querying.
 # Example
 ```julia
 import CalibrateBeforeIT as CBit
-save_path = "data/010_eurostat_tables"
-result = CBit.combine_figaro_tables(save_path)
+eurostat_path = "data/010_eurostat_tables"
+result = CBit.combine_figaro_tables(eurostat_path)
 if result !== nothing
     println("Combined ", length(result.input_tables), " tables into ", result.output_file)
 else
@@ -384,7 +384,7 @@ else
 end
 ```
 """
-function combine_figaro_tables(save_path::String;
+function combine_figaro_tables(eurostat_path::String;
                               conn=nothing,
                               input_tables=["naio_10_fcp_ii1", "naio_10_fcp_ii2",
                                             "naio_10_fcp_ii3", "naio_10_fcp_ii4"],
@@ -398,7 +398,7 @@ function combine_figaro_tables(save_path::String;
         throw(ArgumentError("At least one input table must be specified"))
     end
 
-    if !isdir(save_path)
+    if !isdir(eurostat_path)
         if skip_if_missing
             @warn "Could not combine FIGARO tables (directory does not exist): $save_path"
             @info "Skipping FIGARO combination - ensure save directory exists and input tables are downloaded"
@@ -412,7 +412,7 @@ function combine_figaro_tables(save_path::String;
     missing_files = String[]
     input_files = String[]
     for table in input_tables
-        file_path = joinpath(save_path, "$(table).parquet")
+        file_path = joinpath(eurostat_path, "$(table).parquet")
         if !isfile(file_path)
             push!(missing_files, file_path)
         else
@@ -437,7 +437,7 @@ function combine_figaro_tables(save_path::String;
         local_conn = true
     end
 
-    output_file = joinpath(save_path, "$(output_table).parquet")
+    output_file = joinpath(eurostat_path, "$(output_table).parquet")
 
     try
         # Build SQL query for combining tables

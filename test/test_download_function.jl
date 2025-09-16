@@ -11,11 +11,11 @@ import CalibrateBeforeIT as CBit
     
     # Test with the specific table we've been using
     table_id = "nama_10_an6"
-    save_path = "data/010_eurostat_tables"
+    eurostat_path = "data/010_eurostat_tables"
     
     @testset "Basic functionality" begin
         # Test that function returns the expected structure
-        result = CBit.download_to_parquet(table_id, save_path; use_cached_tsv=true)
+        result = CBit.download_to_parquet(table_id, eurostat_path; use_cached_tsv=true)
         
         # Check return value structure
         @test haskey(result, :tsv_path)
