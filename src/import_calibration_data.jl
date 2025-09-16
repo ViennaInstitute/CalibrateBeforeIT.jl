@@ -134,6 +134,11 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT value FROM '$(pqfile("gov_10a_main"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='D91REC' ORDER BY time"
     calibration_data["capital_taxes"]=execute(conn,sqlquery);
 
+    if geo in ["EE", "SE"]
+        ## convert missing entries to zeros
+        calibration_data["capital_taxes"][ismissing.(calibration_data["capital_taxes"])] .= 0.0
+    end
+
     # sqlquery="SELECT value FROM '$(pqfile("gov_10q_ggnfa"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='D41PAY' AND s_adj='NSA' ORDER BY time"
     # calibration_data["interest_government_debt_quarterly"]=execute(conn,sqlquery);
 
@@ -248,12 +253,6 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     ## TODO there should be a better way to fix this:
     if geo=="BE"
         calibration_data["firms"][10,6]=10;
-    end
-
-    if geo=="EE"
-        calibration_data["capital_taxes"]=zeros(size(calibration_data["corporate_tax"]));
-    elseif geo=="SE"
-        calibration_data["capital_taxes"][6:7]=0;
     end
 
     output=dropdims(sum(figaro["intermediate_consumption"], dims=1), dims=1)+figaro["taxes_products"]+figaro["taxes_production"]+figaro["compensation_employees"]+figaro["operating_surplus"];#+capital_consumption;
