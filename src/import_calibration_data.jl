@@ -265,7 +265,8 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
 
     if !(geo in ["AT", "CZ", "EL", "FI", "LV", "SK"])  # OR [2025-05-06 Di]: removed DK
         fixed_assets_other_than_dwellings=(calibration_data["fixed_assets"]-calibration_data["dwellings"])'.*((calibration_data["fixed_assets_eu7"]-calibration_data["dwellings_eu7"])./calibration_data["nominal_nace64_output_eu7"].*output)./sum((calibration_data["fixed_assets_eu7"]-calibration_data["dwellings_eu7"])./calibration_data["nominal_nace64_output_eu7"].*output);
-        dwellings=zeros(size(fixed_assets_other_than_dwellings));
+        dwellings=zeros(Union{Missing, Float64},
+            size(fixed_assets_other_than_dwellings));
         dwellings[44,:]=calibration_data["dwellings"];
         calibration_data["fixed_assets"]=fixed_assets_other_than_dwellings+dwellings;
         calibration_data["dwellings"]=dwellings;
