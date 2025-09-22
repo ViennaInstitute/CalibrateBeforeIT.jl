@@ -7,3 +7,4 @@
 
 # mac files
 .DS_Store
+*.jld2
