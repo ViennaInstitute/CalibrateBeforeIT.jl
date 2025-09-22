@@ -80,6 +80,17 @@ for geo in all_countries
         number_sectors,
         ctry_figaro)
 
+    ## Create calibration object (same for all quarters)
+    calibration_object = CalibrationData(
+        ctry_calibration_data,
+        ctry_figaro,
+        ctry_data,
+        ea_data,
+        max_calibration_date, estimation_date)
+
+    ## Save the calibration object
+    jldsave("$(CBit.calibration_output_path)/$(geo)/calibration_object.jld2";
+        calibration_object = calibration_object)
 
     ##------------------------------------------------------------
     @info "Step 8: Calculate the initial conditions and parameters"
@@ -89,13 +100,6 @@ for geo in all_countries
             calibration_date = CBit.DateTime(calibration_year, calibration_month,
                 calibration_month in [3, 12] ? 31 : 30);
 
-            calibration_object = CalibrationData(
-                ctry_calibration_data,
-                ctry_figaro,
-                ctry_data,
-                ea_data,
-                max_calibration_date, estimation_date)
-
             parameters, initial_conditions =
                 CBit.get_params_and_initial_conditions(calibration_object,
                     calibration_date; scale = 1/10000);
@@ -103,7 +107,8 @@ for geo in all_countries
             # @info "Calibrated $(geo) $(calibration_year)Q$(calibration_quarter)"
 
             ## Save the parameters and initial conditions
-            jldsave("$(CBit.calibration_output_path)/$(geo)_$(calibration_year)Q$(calibration_quarter)_parameters_initial_conditions.jld2";
+            
+            jldsave("$(CBit.calibration_output_path)/$(geo)/$(calibration_year)Q$(calibration_quarter)_parameters_initial_conditions.jld2";
                 parameters = parameters,
                 initial_conditions = initial_conditions)
         end
