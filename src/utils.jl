@@ -49,8 +49,11 @@ end
 
 using Dates
 
+# Constants for date conversion
+const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24
+
 # Date conversion utilities (MATLAB-compatible)
-date2num(d::Dates.DateTime) = Int64(Dates.value(d - MATLAB_EPOCH) / (1000 * 60 * 60 * 24))
+date2num(d::Dates.DateTime) = Int64(Dates.value(d - MATLAB_EPOCH) / MILLISECONDS_PER_DAY)
 date2num(year::Int64, month::Int64, day::Int64) = date2num(DateTime(year, month, day))
 date2num_yearly(years_range::UnitRange) = [date2num(this_year, 12, 31) for this_year in years_range]
 date2num_quarterly(years_range::UnitRange) = reduce(vcat, [[date2num(this_year, 3, 31), date2num(this_year, 6, 30), date2num(this_year, 9, 30), date2num(this_year, 12, 31)] for this_year in years_range])
@@ -60,6 +63,6 @@ create_year_array_str(all_years) = join(["'$(year)'" for year in all_years], ", 
 # MATLAB epoch for date conversions
 const MATLAB_EPOCH = Dates.DateTime(-1, 12, 31)
 # Convert MATLAB date number back to DateTime
-num2date(n::Number) = MATLAB_EPOCH + Dates.Millisecond(round(Int64, n * 1000 * 60 * 60 * 24))
+num2date(n::Number) = MATLAB_EPOCH + Dates.Millisecond(round(Int64, n * MILLISECONDS_PER_DAY))
 
 # end
