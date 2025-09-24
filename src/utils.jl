@@ -62,7 +62,7 @@ date2num(year::Int64, month::Int64, day::Int64)::Int64 = date2num(DateTime(year,
 date2num_yearly(years_range::UnitRange{Int64})::Vector{Int64} = [date2num(this_year, 12, 31) for this_year in years_range]
 date2num_quarterly(years_range::UnitRange{Int64})::Vector{Int64} = reduce(vcat, [[date2num(this_year, 3, 31), date2num(this_year, 6, 30), date2num(this_year, 9, 30), date2num(this_year, 12, 31)] for this_year in years_range])
 
-create_year_array_str(all_years::Vector{Int64})::String = join(["'$(year)'" for year in all_years], ", ")
+create_year_array_str(all_years::Vector)::String = join(["'$(year)'" for year in all_years], ", ")
 
 # MATLAB epoch for date conversions
 const MATLAB_EPOCH = Dates.DateTime(-1, 12, 31)
