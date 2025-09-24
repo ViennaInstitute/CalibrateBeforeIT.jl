@@ -89,7 +89,7 @@ function download_to_parquet(table_id::String, eurostat_path::String;
     try
         mkpath(eurostat_path)
     catch e
-        throw(ArgumentError("Cannot create save directory '$save_path': $e"))
+        throw(ArgumentError("Cannot create save directory '$eurostat_path': $e"))
     end
 
     # File paths
@@ -400,11 +400,11 @@ function combine_figaro_tables(eurostat_path::String;
 
     if !isdir(eurostat_path)
         if skip_if_missing
-            @warn "Could not combine FIGARO tables (directory does not exist): $save_path"
+            @warn "Could not combine FIGARO tables (directory does not exist): $eurostat_path"
             @info "Skipping FIGARO combination - ensure save directory exists and input tables are downloaded"
             return nothing
         else
-            throw(ArgumentError("Save path directory does not exist: $save_path"))
+            throw(ArgumentError("Save path directory does not exist: $eurostat_path"))
         end
     end
 
