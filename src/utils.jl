@@ -31,7 +31,11 @@ end
 
 function extract_years(conn, table_id::String, start_calibration_year::Int64)::Vector{Int64}
     sqlquery = "SELECT DISTINCT time FROM '$(pqfile(table_id))' ORDER BY time"
-    res_years = parse.(Int64, execute(conn, sqlquery))
+    res_years = try
+        parse.(Int64, execute(conn, sqlquery))
+    catch e
+        error("Failed to parse years from the database: $e")
+    end
     filter!(x -> x >= start_calibration_year, res_years)
     return res_years
 end
