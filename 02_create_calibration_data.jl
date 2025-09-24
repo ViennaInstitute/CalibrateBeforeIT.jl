@@ -89,6 +89,7 @@ for geo in all_countries
         max_calibration_date, estimation_date)
 
     ## Save the calibration object
+    mkpath("$(CBit.calibration_output_path)/$(geo)")
     jldsave("$(CBit.calibration_output_path)/$(geo)/calibration_object.jld2";
         calibration_object = calibration_object)
 
@@ -107,7 +108,6 @@ for geo in all_countries
             # @info "Calibrated $(geo) $(calibration_year)Q$(calibration_quarter)"
 
             ## Save the parameters and initial conditions
-            
             jldsave("$(CBit.calibration_output_path)/$(geo)/$(calibration_year)Q$(calibration_quarter)_parameters_initial_conditions.jld2";
                 parameters = parameters,
                 initial_conditions = initial_conditions)
