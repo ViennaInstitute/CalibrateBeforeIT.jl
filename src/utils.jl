@@ -43,7 +43,7 @@ end
 using Interpolations
 
 # Interpolation utilities
-function linear_interp_extrap(x::Vector, y::Vector, xi::Vector)::Vector
+function linear_interp_extrap(x, y, xi)::Vector
     # Create linear interpolation object with extrapolation
     itp = linear_interpolation(x, y, extrapolation_bc = Line())
 
