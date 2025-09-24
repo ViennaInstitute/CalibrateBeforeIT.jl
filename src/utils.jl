@@ -1,6 +1,12 @@
-# module Utils
-# export pqfile, execute
-# using DuckDB, Tables
+module Utils
+
+using DuckDB, Tables, Interpolations, Dates
+
+export pqfile, execute, extract_years, linear_interp_extrap, date2num, date2num_yearly, date2num_quarterly, create_year_array_str, num2date
+
+# Constants for date conversion
+const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24
+const MATLAB_EPOCH = Dates.DateTime(-1, 12, 31)
 
 # File path utilities
 function pqfile(table_id::String)::String
@@ -18,7 +24,7 @@ end
 # Database query utilities -- debug version
 function execute_debug(conn, query::String)::DataFrame
     # Execute SQL query and return a DataFrame
-    res = DataFrame(columntable(DBInterface.execute(conn, sqlquery)))
+    res = DataFrame(columntable(DBInterface.execute(conn, query)))
     return res
 end
 
@@ -31,12 +37,14 @@ end
 
 function extract_years(conn, table_id::String, start_calibration_year::Int64)::Vector{Int64}
     sqlquery = "SELECT DISTINCT time FROM '$(pqfile(table_id))' ORDER BY time"
-    res_years = parse.(Int64, execute(conn, sqlquery))
+    res_years = try
+        parse.(Int64, execute(conn, sqlquery))
+    catch e
+        error("Failed to parse years from the database: $e")
+    end
     filter!(x -> x >= start_calibration_year, res_years)
     return res_years
 end
-
-using Interpolations
 
 # Interpolation utilities
 function linear_interp_extrap(x::Vector, y::Vector, xi::Vector)::Vector
@@ -47,11 +55,6 @@ function linear_interp_extrap(x::Vector, y::Vector, xi::Vector)::Vector
     return itp(xi)
 end
 
-using Dates
-
-# Constants for date conversion
-const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24
-
 # Date conversion utilities (MATLAB-compatible)
 date2num(d::Dates.DateTime)::Int64 = Int64(Dates.value(d - MATLAB_EPOCH) / MILLISECONDS_PER_DAY)
 date2num(year::Int64, month::Int64, day::Int64)::Int64 = date2num(DateTime(year, month, day))
@@ -60,9 +63,7 @@ date2num_quarterly(years_range::UnitRange{Int64})::Vector{Int64} = reduce(vcat, 
 
 create_year_array_str(all_years::Vector{Int64})::String = join(["'$(year)'" for year in all_years], ", ")
 
-# MATLAB epoch for date conversions
-const MATLAB_EPOCH = Dates.DateTime(-1, 12, 31)
 # Convert MATLAB date number back to DateTime
 num2date(n::Number)::Dates.DateTime = MATLAB_EPOCH + Dates.Millisecond(round(Int64, n * MILLISECONDS_PER_DAY))
 
-# end
+end # module
