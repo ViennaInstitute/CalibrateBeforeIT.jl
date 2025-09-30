@@ -41,28 +41,6 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT value FROM '$(pqfile("nama_10_a64"))' WHERE nace_r2='TOTAL' AND time IN ($(years_str)) AND unit = 'CP_MEUR' AND na_item='D11' AND geo='$(geo)' ORDER BY time, nace_r2"
     calibration_data["wages"]=execute(conn,sqlquery);
 
-    if geo in ["AT", "CZ", "EL", "FI", "LV", "SK"] # OR [2025-05-06 Di]: removed DK
-        sqlquery="SELECT value FROM '$(pqfile("nama_10_nfa_st"))' WHERE nace_r2 IN (SELECT nace FROM '$(pqfile("nace64"))') AND geo='$(geo)' AND time IN ($(years_str)) AND nace_r2 NOT IN ('T', 'U', 'L68A') AND asset10='N11N' AND unit='CRC_MEUR' ORDER BY time, nace_r2"
-        calibration_data["fixed_assets"]=execute(conn,sqlquery,(number_sectors,number_years));
-
-        sqlquery="SELECT value FROM '$(pqfile("nama_10_nfa_st"))' WHERE nace_r2 IN (SELECT nace FROM '$(pqfile("nace64"))') AND geo='$(geo)' AND time IN ($(years_str)) AND nace_r2 NOT IN ('T', 'U', 'L68A') AND asset10='N111N' AND unit='CRC_MEUR' ORDER BY time, nace_r2"
-        calibration_data["dwellings"]=execute(conn,sqlquery,(number_sectors,number_years));
-    else
-        sqlquery="SELECT value FROM '$(pqfile("nama_10_nfa_st"))' WHERE nace_r2 = 'TOTAL' AND geo='$(geo)' AND time IN ($(years_str)) AND asset10='N11N' AND unit='CRC_MEUR' ORDER BY time"
-        calibration_data["fixed_assets"]=execute(conn,sqlquery);
-
-        sqlquery="SELECT value FROM '$(pqfile("nama_10_nfa_st"))' WHERE nace_r2 = 'TOTAL' AND geo='$(geo)' AND time IN ($(years_str)) AND asset10='N111N' AND unit='CRC_MEUR' ORDER BY time"
-        calibration_data["dwellings"]=execute(conn,sqlquery);
-
-        sqlquery="SELECT sum(value) FROM '$(pqfile("nama_10_nfa_st"))' WHERE nace_r2 IN (SELECT nace FROM '$(pqfile("nace64"))') AND geo IN ('AT', 'CZ', 'DK', 'EL', 'FI', 'LV', 'SK') AND time IN ($(years_str)) AND nace_r2 NOT IN ('T', 'U', 'L68A') AND asset10='N11N' AND unit='CRC_MEUR' GROUP BY time, nace_r2 ORDER BY time, nace_r2"
-        calibration_data["fixed_assets_eu7"]=execute(conn,sqlquery,(number_sectors,number_years));
-
-        sqlquery="SELECT sum(value) FROM '$(pqfile("nama_10_nfa_st"))' WHERE nace_r2 IN (SELECT nace FROM '$(pqfile("nace64"))') AND geo IN ('AT', 'CZ', 'DK', 'EL', 'FI', 'LV', 'SK') AND time IN ($(years_str)) AND nace_r2 NOT IN ('T', 'U', 'L68A') AND asset10='N111N' AND unit='CRC_MEUR' GROUP BY time, nace_r2 ORDER BY time, nace_r2"
-        calibration_data["dwellings_eu7"]=execute(conn,sqlquery,(number_sectors,number_years));
-
-        sqlquery="SELECT sum(value) FROM '$(pqfile("nama_10_a64"))' WHERE nace_r2 IN (SELECT nace FROM '$(pqfile("nace64"))') AND time IN ($(years_str)) AND nace_r2 NOT IN ('T', 'U', 'L68A') AND unit = 'CP_MEUR' AND na_item='P1' AND geo IN ('AT', 'CZ', 'DK', 'EL', 'FI', 'LV', 'SK') GROUP BY time, nace_r2 ORDER BY time, nace_r2"
-        calibration_data["nominal_nace64_output_eu7"]=execute(conn,sqlquery,(number_sectors,number_years));
-    end
 
     # sqlquery="SELECT value FROM '$(pqfile("nasa_10_f_bs"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S11' AND na_item='F2' AND finpos='ASS' AND co_nco='NCO' ORDER BY time"
     # calibration_data["firm_cash"]=execute(conn,sqlquery);
@@ -262,8 +240,37 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
         calibration_data["capital_consumption"]=calibration_data["nace64_capital_consumption"]./calibration_data["nominal_nace64_output"].*output;
     end
 
-    if !(geo in ["AT", "CZ", "EL", "FI", "LV", "SK"])  # OR [2025-05-06 Di]: removed DK
-        fixed_assets_other_than_dwellings=(calibration_data["fixed_assets"]-calibration_data["dwellings"])'.*((calibration_data["fixed_assets_eu7"]-calibration_data["dwellings_eu7"])./calibration_data["nominal_nace64_output_eu7"].*output)./sum((calibration_data["fixed_assets_eu7"]-calibration_data["dwellings_eu7"])./calibration_data["nominal_nace64_output_eu7"].*output);
+    if geo in ["AT", "BG", "CZ", "EL", "FI", "LV", "SK"] # OR [2025-05-06 Di]: removed DK
+        sqlquery="SELECT value FROM '$(pqfile("nama_10_nfa_st"))' WHERE nace_r2 IN (SELECT nace FROM '$(pqfile("nace64"))') AND geo='$(geo)' AND time IN ($(years_str)) AND nace_r2 NOT IN ('T', 'U', 'L68A') AND asset10='N11N' AND unit='CRC_MEUR' ORDER BY time, nace_r2"
+        calibration_data["fixed_assets"]=execute(conn,sqlquery,(number_sectors,number_years));
+
+        sqlquery="SELECT value FROM '$(pqfile("nama_10_nfa_st"))' WHERE nace_r2 IN (SELECT nace FROM '$(pqfile("nace64"))') AND geo='$(geo)' AND time IN ($(years_str)) AND nace_r2 NOT IN ('T', 'U', 'L68A') AND asset10='N111N' AND unit='CRC_MEUR' ORDER BY time, nace_r2"
+        calibration_data["dwellings"]=execute(conn,sqlquery,(number_sectors,number_years));
+    else
+        ## For some countries, there is insufficient industry-level data on
+        ## fixed assets and dwellings, only country totals. For these countries,
+        ## we assume that fixed assets have the same structure as the EU7 and
+        ## distribute their total fixed assets accordingly. Total dwellings are
+        ## all assigned to the real estate industry.
+        sqlquery="SELECT value FROM '$(pqfile("nama_10_nfa_st"))' WHERE nace_r2 = 'TOTAL' AND geo='$(geo)' AND time IN ($(years_str)) AND asset10='N11N' AND unit='CRC_MEUR' ORDER BY time"
+        calibration_data["fixed_assets"]=execute(conn,sqlquery);
+
+        sqlquery="SELECT value FROM '$(pqfile("nama_10_nfa_st"))' WHERE nace_r2 = 'TOTAL' AND geo='$(geo)' AND time IN ($(years_str)) AND asset10='N111N' AND unit='CRC_MEUR' ORDER BY time"
+        calibration_data["dwellings"]=execute(conn,sqlquery);
+
+        sqlquery="SELECT sum(value) FROM '$(pqfile("nama_10_nfa_st"))' WHERE nace_r2 IN (SELECT nace FROM '$(pqfile("nace64"))') AND geo IN ('AT', 'CZ', 'DK', 'EL', 'FI', 'LV', 'SK') AND time IN ($(years_str)) AND nace_r2 NOT IN ('T', 'U', 'L68A') AND asset10='N11N' AND unit='CRC_MEUR' GROUP BY time, nace_r2 ORDER BY time, nace_r2"
+        calibration_data["fixed_assets_eu7"]=execute(conn,sqlquery,(number_sectors,number_years));
+
+        sqlquery="SELECT sum(value) FROM '$(pqfile("nama_10_nfa_st"))' WHERE nace_r2 IN (SELECT nace FROM '$(pqfile("nace64"))') AND geo IN ('AT', 'CZ', 'DK', 'EL', 'FI', 'LV', 'SK') AND time IN ($(years_str)) AND nace_r2 NOT IN ('T', 'U', 'L68A') AND asset10='N111N' AND unit='CRC_MEUR' GROUP BY time, nace_r2 ORDER BY time, nace_r2"
+        calibration_data["dwellings_eu7"]=execute(conn,sqlquery,(number_sectors,number_years));
+
+        sqlquery="SELECT sum(value) FROM '$(pqfile("nama_10_a64"))' WHERE nace_r2 IN (SELECT nace FROM '$(pqfile("nace64"))') AND time IN ($(years_str)) AND nace_r2 NOT IN ('T', 'U', 'L68A') AND unit = 'CP_MEUR' AND na_item='P1' AND geo IN ('AT', 'CZ', 'DK', 'EL', 'FI', 'LV', 'SK') GROUP BY time, nace_r2 ORDER BY time, nace_r2"
+        calibration_data["nominal_nace64_output_eu7"]=execute(conn,sqlquery,(number_sectors,number_years));
+
+        fixed_assets_other_than_dwellings=(calibration_data["fixed_assets"]-calibration_data["dwellings"])' .*
+                                          ((calibration_data["fixed_assets_eu7"]-calibration_data["dwellings_eu7"]) ./ calibration_data["nominal_nace64_output_eu7"].*output) ./
+                                          sum((calibration_data["fixed_assets_eu7"]-calibration_data["dwellings_eu7"]) ./ calibration_data["nominal_nace64_output_eu7"].*output,
+                                              dims = 1);
         dwellings=zeros(Union{Missing, Float64},
             size(fixed_assets_other_than_dwellings));
         dwellings[44,:]=calibration_data["dwellings"];
