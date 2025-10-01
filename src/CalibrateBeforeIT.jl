@@ -7,6 +7,7 @@ using DuckDB
 using Tables
 using DataFrames
 using Dates
+using JLD2
 using StatsBase ## only for cov in get_params_and_initial_conditions
 
 # Eurostat table IDs required for calibration
