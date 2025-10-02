@@ -212,26 +212,48 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     ) foo ORDER BY time, nace_r2
     """
 
-    #     'UNION " ...
-    #     'SELECT time, nace_r2, 1e2*value AS value FROM '$(pqfile("nama_10_a64_e"))' WHERE time IN ($(years_str))
-    #     AND geo='$(geo)' AND unit = 'THS_PER' AND na_item='SAL_DC' AND nace_r2 IN ('A01','A02','A03','O') " ...
-    # x1=execute_debug(conn,sqlquery);
-    # res = combine(groupby(x1, [:nace_r2]), nrow => :count) ## number of rows by 'nace_r2'
-    # x1[x1.nace_r2 .== "K64", :]
-    # x1[x1.nace_r2 .== "L", :]
-    # x2=unstack(x1, :nace_r2, :time, :value)
-    # x2[:, [20, 21]]
-
     calibration_data["firms"]=execute(conn,sqlquery);
     number_firm_years = union(union(sbs_na_sca_r2_years, sbs_ovw_act_years),
         union(bd_9ac_l_form_r2_years, bd_l_form_years)) |> length
     calibration_data["firms"]=reshape(calibration_data["firms"],(number_sectors,number_firm_years));
-    calibration_data["firms"][ismissing.(calibration_data["firms"])]=round.(calibration_data["employees"][:, 1:number_firm_years][ismissing.(calibration_data["firms"])]/10);
 
-    ## TODO there should be a better way to fix this:
-    if geo=="BE"
-        calibration_data["firms"][10,6]=10;
+    ## Get all industries whose number of missing entries is more than 0 and
+    ## less than the number of years minus 3 (so there are at least some entries
+    ## which we can use for imputation). We use linear interpolation to impute,
+    ## but log the values before and exponentiate them afterwards (also to avoid
+    ## predicting negative values). Finally, we assume that there is at least
+    ## one firm in every industry.
+    industries_with_missings = 0 .< dropdims(sum(ismissing.(calibration_data["firms"]), dims = 2), dims = 2) .< (number_firm_years - 3)
+    indizes_with_missing = findall(!iszero, industries_with_missings)
+    all_time_indizes = collect(1:number_firm_years)
+    for industry_index in indizes_with_missing
+        industry_values = calibration_data["firms"][industry_index, :]
+        nonmissing_entries = all_time_indizes[.!ismissing.(industry_values)]
+        @info " --> $(geo): Imputing nr of firms in industry $(industry_index): nr missing = $(sum(ismissing.(industry_values)))"
+        imputed_industry_values = max.(round.(exp.(linear_interp_extrap(nonmissing_entries,
+            log.(industry_values[nonmissing_entries]),
+            all_time_indizes))), 1)
+        calibration_data["firms"][industry_index, :] = imputed_industry_values
     end
+
+    ## Find industries that still have missings (# missings > (number_years -
+    ## 3)): these industries will be imputed by assuming an average number of
+    ## employees and estimating the number of firms from the number of employees
+    industries_with_missings = 0 .< dropdims(sum(ismissing.(calibration_data["firms"]), dims = 2), dims = 2)
+    indizes_with_missing = findall(!iszero, industries_with_missings)
+    indizes_with_missing_str = create_year_array_str(indizes_with_missing)
+    sqlquery = "select nace from '$(pqfile("nace64"))' where id in ($(indizes_with_missing_str))"
+    missing_industries = execute(conn, sqlquery)
+
+    if length(missing_industries) > 0
+        @warn " --> $(geo): Nr firms in industries $(missing_industries) are still missing (will be imputed with avg nr of workers)"
+    end
+
+    ## For all industries where we still do not have number of firms: calculate
+    ## the economy-wide average number of employees per firm and use that
+    ## average to estimate the number of firms from the number of employees
+    avg_number_of_employees = 10
+    calibration_data["firms"][ismissing.(calibration_data["firms"])]=round.(calibration_data["employees"][:, 1:number_firm_years][ismissing.(calibration_data["firms"])] / avg_number_of_employees);
 
     output=dropdims(sum(figaro["intermediate_consumption"], dims=1), dims=1)+figaro["taxes_products"]+figaro["taxes_production"]+figaro["compensation_employees"]+figaro["operating_surplus"];#+capital_consumption;
     if geo in ["FR", "IE", "LT", "LU", "MT", "PL", "SE"]

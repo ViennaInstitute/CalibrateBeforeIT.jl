@@ -87,7 +87,7 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
         nominal_nace64_output_eu7 = calibration_data["nominal_nace64_output_eu7"][:, T_calibration]
         fixed_assets_other_than_dwellings =
             (fixed_assets - dwellings) * ((fixed_assets_eu7 - dwellings_eu7) ./ nominal_nace64_output_eu7 .* output) /
-            sum((fixed_assets_eu7 - dwellings_eu7) ./ nominal_nace64_output_eu7 .* output)
+            sum((fixed_assets_eu7 - dwellings_eu7) ./ nominal_nace64_output_eu7 .* output, dims = 1)
     end
 
     # ## OR [2025-09-15 Mo]: capital_consumption is already computed in
