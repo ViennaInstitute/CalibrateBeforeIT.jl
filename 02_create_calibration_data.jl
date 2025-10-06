@@ -69,6 +69,10 @@ for geo in all_countries
 
     ##------------------------------------------------------------
     @info "Step 6: 'Import data': GDP, GVA, Consumption time series"
+    if geo in ["MT"]
+        global start_year = 2000
+        global estimation_date = CBit.DateTime(start_year, 12, 31)
+    end
     ctry_data = CBit.import_data(geo, start_year, end_year)
 
 
