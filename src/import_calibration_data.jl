@@ -255,9 +255,15 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     avg_number_of_employees = 10
     calibration_data["firms"][ismissing.(calibration_data["firms"])]=round.(calibration_data["employees"][:, 1:number_firm_years][ismissing.(calibration_data["firms"])] / avg_number_of_employees);
 
-    output=dropdims(sum(figaro["intermediate_consumption"], dims=1), dims=1)+figaro["taxes_products"]+figaro["taxes_production"]+figaro["compensation_employees"]+figaro["operating_surplus"];#+capital_consumption;
+
+    output=dropdims(sum(figaro["intermediate_consumption"], dims=1), dims=1) +
+           figaro["taxes_products"] + figaro["taxes_production"] +
+           figaro["compensation_employees"] + figaro["operating_surplus"];#+capital_consumption;
     if geo in ["FR", "IE", "LT", "LU", "MT", "PL", "SE"]
-        calibration_data["capital_consumption"]=calibration_data["capital_consumption"]'.*(calibration_data["nace64_capital_consumption_eu20"]./calibration_data["nominal_nace64_output_eu20"].*output)./sum(calibration_data["nace64_capital_consumption_eu20"]./calibration_data["nominal_nace64_output_eu20"].*output);
+        calibration_data["capital_consumption"]=calibration_data["capital_consumption"]' .*
+                                                (calibration_data["nace64_capital_consumption_eu20"] ./ calibration_data["nominal_nace64_output_eu20"] .* output) ./
+                                                sum(calibration_data["nace64_capital_consumption_eu20"] ./ calibration_data["nominal_nace64_output_eu20"] .* output,
+                                                dims = 1);
     else
         calibration_data["capital_consumption"]=calibration_data["nace64_capital_consumption"]./calibration_data["nominal_nace64_output"].*output;
     end
