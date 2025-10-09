@@ -28,23 +28,23 @@ import CalibrateBeforeIT as CBit
     end
 
     @testset "FIGARO Data Processing" begin
-        # Test combine_figaro_tables function with invalid directory (skip_if_missing=true)
-        result = CBit.combine_figaro_tables("nonexistent_directory")
+        # Test combine_tables function with invalid directory (skip_if_missing=true)
+        result = CBit.combine_tables("nonexistent_directory")
         @test result === nothing
 
-        # Test combine_figaro_tables function with invalid directory (skip_if_missing=false)
-        @test_throws ArgumentError CBit.combine_figaro_tables("nonexistent_directory"; skip_if_missing=false)
+        # Test combine_tables function with invalid directory (skip_if_missing=false)
+        @test_throws ArgumentError CBit.combine_tables("nonexistent_directory"; skip_if_missing=false)
 
         # Test with valid directory but missing files (skip_if_missing=true)
         temp_dir = mktempdir()
-        result = CBit.combine_figaro_tables(temp_dir)
+        result = CBit.combine_tables(temp_dir)
         @test result === nothing
 
         # Test with valid directory but missing files (skip_if_missing=false)
-        @test_throws ArgumentError CBit.combine_figaro_tables(temp_dir; skip_if_missing=false)
+        @test_throws ArgumentError CBit.combine_tables(temp_dir; skip_if_missing=false)
 
         # Test parameter validation
-        @test_throws ArgumentError CBit.combine_figaro_tables(temp_dir; input_tables=String[], skip_if_missing=false)
+        @test_throws ArgumentError CBit.combine_tables(temp_dir; input_tables=String[], skip_if_missing=false)
 
         # Clean up
         rm(temp_dir)

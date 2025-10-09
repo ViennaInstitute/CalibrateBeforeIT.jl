@@ -3,7 +3,7 @@ using CalibrateBeforeIT
 using Dates
 
 @testset "Utils Tests" begin
-    
+
     @testset "Linear Interpolation and Extrapolation Tests" begin
         # Example data
         y = [50.4700, 47.9040, 46.9640, 39.5860, 34.9000, 41.9340,
