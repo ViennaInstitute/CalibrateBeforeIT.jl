@@ -48,9 +48,8 @@ for shell mode.
 
 ## Step 1: download Eurostat tables as .parquet files
 
-Run script `01_download_raw_eurostat_tables.jl`.
-
-Reserve at least 3GB of disk space and allow the script to run one or two hours.
+Run script `01_download_raw_eurostat_tables.jl`. Reserve at least 3GB of
+disk space and allow the script to run one or two hours.
 
 The following steps are carried out:
 
@@ -80,7 +79,9 @@ inputs.
 
 Run script `03_create_calibration_data.jl`. In the script, one can
 specify the country, year ranges, etc that are parameters to the
-calibration process. The following steps are carried out:
+calibration process. 
+
+The following steps are carried out:
 
 1. Import data for the EA19 country aggregate. This is used as an
    imputation device for countries that lack certain time series.
