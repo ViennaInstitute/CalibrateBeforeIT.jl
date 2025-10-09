@@ -50,6 +50,12 @@ function extract_years(conn, table_id::String, start_calibration_year::Int64)::V
     return res_years
 end
 
+function extract_years(conn, table_id::String)::Vector{Int64}
+    extract_years(conn, table_id, typemin(Int64))
+end
+
+create_year_array_str(all_years::Vector)::String = join(["'$(year)'" for year in all_years], ", ")
+
 # Interpolation utilities
 function linear_interp_extrap(x, y, xi)::Vector
     # Create linear interpolation object with extrapolation
@@ -68,6 +74,5 @@ date2num_quarterly(years_range::UnitRange{Int64})::Vector{Int64} = reduce(vcat, 
 # Convert MATLAB date number back to DateTime
 num2date(n::Number)::Dates.DateTime = MATLAB_EPOCH + Dates.Millisecond(round(Int64, n * MILLISECONDS_PER_DAY))
 
-create_year_array_str(all_years::Vector)::String = join(["'$(year)'" for year in all_years], ", ")
 
 # end
