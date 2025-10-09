@@ -28,7 +28,6 @@ for table_id in all_eurostat_table_ids
     CBit.download_to_parquet(table_id, eurostat_path; use_cached_tsv=true)
 end
 
-
 ##------------------------------------------------------------
 ## Step 2: Save the NACE64.csv (industry classification table) as parquet too
 table_id = "nace64"
