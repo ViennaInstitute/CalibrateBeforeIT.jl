@@ -116,5 +116,4 @@ success, rows = CBit.create_enterprise_statistics_a64_data("sbs_ovw_act",
 # test = "SELECT * FROM '$(pqfile("bd_9ac_l_form_a64"))' LIMIT 10;"
 # DBInterface.execute(conn, test)
 
-
 ## After this step, we have the necessary data stored on disk!
