@@ -388,7 +388,14 @@ function import_data(geo, start_year, end_year)
     data["compensation_employees"] = execute(conn,sqlquery);
 
     # Quarterly
-    sqlquery="SELECT value FROM '$(pqfile("namq_10_gdp"))' WHERE time IN ($(quarters_str)) AND geo='$(geo)' AND na_item='D1' AND unit='CP_MEUR' AND s_adj='SCA' ORDER BY time"
+    s_adj_namq_10_gdp = "SCA"
+    ## Some countries do not report time series in the "seasonally and calendar
+    ## adjusted" (= SCA) way that we would need. For these countries, we fall
+    ## back to the "seasonally adjusted" (= SA) series.
+    if geo in ["DE", "FR"]
+        s_adj_namq_10_gdp = "SA"
+    end
+    sqlquery="SELECT value FROM '$(pqfile("namq_10_gdp"))' WHERE time IN ($(quarters_str)) AND geo='$(geo)' AND na_item='D1' AND unit='CP_MEUR' AND s_adj='$(s_adj_namq_10_gdp)' ORDER BY time"
     data["compensation_employees_quarterly"]=execute(conn,sqlquery);
 
 
@@ -399,7 +406,7 @@ function import_data(geo, start_year, end_year)
     data["wages"] = execute(conn,sqlquery);
 
     # Quarterly
-    sqlquery="SELECT value FROM '$(pqfile("namq_10_gdp"))' WHERE time IN ($(quarters_str)) AND geo='$(geo)' AND na_item='D11' AND unit='CP_MEUR' AND s_adj='SCA' ORDER BY time"
+    sqlquery="SELECT value FROM '$(pqfile("namq_10_gdp"))' WHERE time IN ($(quarters_str)) AND geo='$(geo)' AND na_item='D11' AND unit='CP_MEUR' AND s_adj='$(s_adj_namq_10_gdp)' ORDER BY time"
     data["wages_quarterly"]=execute(conn,sqlquery);
 
 
@@ -410,7 +417,7 @@ function import_data(geo, start_year, end_year)
     data["operating_surplus"] = execute(conn,sqlquery);
 
     # Quarterly
-    sqlquery="SELECT value FROM '$(pqfile("namq_10_gdp"))' WHERE time IN ($(quarters_str)) AND geo='$(geo)' AND na_item='B2A3G' AND unit='CP_MEUR' AND s_adj='SCA' ORDER BY time"
+    sqlquery="SELECT value FROM '$(pqfile("namq_10_gdp"))' WHERE time IN ($(quarters_str)) AND geo='$(geo)' AND na_item='B2A3G' AND unit='CP_MEUR' AND s_adj='$(s_adj_namq_10_gdp)' ORDER BY time"
     data["operating_surplus_quarterly"]=execute(conn,sqlquery);
 
 
@@ -420,10 +427,11 @@ function import_data(geo, start_year, end_year)
     sqlquery="SELECT value FROM '$(pqfile("nama_10_pe"))' WHERE time IN ($(years_str)) AND geo='$(geo)' AND na_item='EMP_DC' AND unit='THS_PER' ORDER BY time"
     data["employed"] = execute(conn,sqlquery);
 
+    ## OR [2025-10-09 Do]: commented out, "employed_quarterly" is not used
+    ## anywhere
     # Quarterly
-    sqlquery="SELECT value FROM '$(pqfile("namq_10_pe"))' WHERE time IN ($(quarters_str)) AND geo='$(geo)' AND na_item='EMP_DC' AND unit='THS_PER' AND s_adj='SCA' ORDER BY time"
-    data["employed_quarterly"]=execute(conn,sqlquery);
-
+    # sqlquery="SELECT value FROM '$(pqfile("namq_10_pe"))' WHERE time IN ($(quarters_str)) AND geo='$(geo)' AND na_item='EMP_DC' AND unit='THS_PER' AND s_adj='SCA' ORDER BY time"
+    # data["employed_quarterly"]=execute(conn,sqlquery);
 
     if geo != "EA19"
         ## Unemployment rate
