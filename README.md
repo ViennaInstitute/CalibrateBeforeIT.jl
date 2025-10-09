@@ -44,32 +44,44 @@ needed package dependencies by this project. Press `backspace` to
 return to normal "julia" mode. Equivalently, `?` is for help mode, `;`
 for shell mode.
 
-# Example usage
+# Example Usage
 
-## Step 1: download and store Eurostat tables as .parquet files
+## Step 1: download Eurostat tables as .parquet files
 
-Run script `01_download_eurostat_tables.jl`. Reserve at least 3GB of
-disk space and allow the script to run one or two hours. The following
-steps are carried out:
+Run script `01_download_raw_eurostat_tables.jl`. Reserve at least 3GB of
+disk space and allow the script to run one or two hours.
+
+The following steps are carried out:
 
 1. Download of the necessary Eurostat tables, convert to long format
    and save as `.parquet` files in the `data/` directory.
-2. Write a predefined NACE Rev.2 industry classification to disk.
-3. Input-output coefficients are separated into three tables
-   (2010-2014, 2015-2019, 2020 onwards). Because we need a
-   time-series, we append the three tables into one.
-4. Firm counts are not available through just one table: We have to
-   extract the necessary data items and write them to disk for later
-   easier querying.
    
 After that, the `data/` directory is populated with the `.parquet` files
-that we then need for second script.
+that we then need for the next steps.
 
-## Step 2: generate the calibration input data for a given country
+## Step 2: preprocess Eurostat tables
 
-Run script `02_create_calibration_data.jl`. In the script, one can
+Run script `02_preprocess_raw_eurostat_tables.jl`.
+
+The following steps are carried out:
+
+1. Input-output coefficients are separated into three tables
+   (2010-2014, 2015-2019, 2020 onwards). Because we need a
+   time-series, we append the three tables into one.
+2. Firm counts are not available through just one table: We have to
+   extract the necessary data items and write them to disk for later
+   easier querying.
+
+The data are preprocessed to help in the generation of calibration
+inputs.
+
+## Step 3: generate the calibration input data for a given country
+
+Run script `03_create_calibration_data.jl`. In the script, one can
 specify the country, year ranges, etc that are parameters to the
-calibration process. The following steps are carried out:
+calibration process. 
+
+The following steps are carried out:
 
 1. Import data for the EA19 country aggregate. This is used as an
    imputation device for countries that lack certain time series.
