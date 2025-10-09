@@ -78,7 +78,7 @@ inputs.
 
 ## Step 3: generate the calibration input data for a given country
 
-Run script `02_create_calibration_data.jl`. In the script, one can
+Run script `03_create_calibration_data.jl`. In the script, one can
 specify the country, year ranges, etc that are parameters to the
 calibration process. The following steps are carried out:
 
