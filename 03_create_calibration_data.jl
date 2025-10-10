@@ -10,8 +10,8 @@ cd(@__DIR__)
 
 import CalibrateBeforeIT as CBit
 
-## Set some parameters for the data-downloading process. `eurostat_path` is already
-## set to a default directory value, which can be re-set here:
+## Set some parameters for the data-downloading process. `eurostat_path` is
+## already set to a default directory value, which can be re-set here:
 # CBit.eurostat_path = "data/010_eurostat_tables"
 mkpath(CBit.eurostat_path)
 mkpath(CBit.calibration_output_path)

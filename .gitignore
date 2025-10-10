@@ -8,3 +8,4 @@
 # mac files
 .DS_Store
 *.jld2
+/Manifest*.toml

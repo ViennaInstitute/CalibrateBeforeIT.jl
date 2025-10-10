@@ -15,7 +15,8 @@ conn = CBit.DuckDB.DBInterface.connect(CBit.DuckDB.DB)
 ## Step 1: Append the three Figaro tables into one. Eurostat splits the Figaro
 ## IO tables into three separate tables. For us to query them efficiently, we
 ## append them onto each other and save them again as a .parquet file.
-result_figaro = CBit.combine_figaro_tables(eurostat_path; conn=conn, skip_if_missing=false)
+result_figaro = CBit.combine_tables(eurostat_path;
+    conn=conn, skip_if_missing=false)
 @info "FIGARO combination result: $(result_figaro.output_file)"
 
 
