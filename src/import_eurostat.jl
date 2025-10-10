@@ -346,15 +346,16 @@ Base.showerror(io::IO, e::DownloadError) = print(io, "DownloadError: ", e.messag
 Base.showerror(io::IO, e::ProcessingError) = print(io, "ProcessingError: ", e.message)
 
 """
-    combine_figaro_tables(eurostat_path::String;
+    combine_tables(eurostat_path::String;
                          conn=nothing,
                          input_tables=["naio_10_fcp_ii1", "naio_10_fcp_ii2", "naio_10_fcp_ii3"],
                          output_table="naio_10_fcp_ii",
                          skip_if_missing=true)
 
-Combine the three FIGARO Input-Output tables into a single table.
+Combine the multiple tables into a single table.
 
-Eurostat splits the FIGARO IO tables into three separate tables by time periods:
+For example, Eurostat splits the FIGARO IO tables into three separate tables by
+time periods:
 - naio_10_fcp_ii1: 2010-2013
 - naio_10_fcp_ii2: 2014-2017
 - naio_10_fcp_ii3: 2018-2021
@@ -376,7 +377,7 @@ This function appends them into one table for efficient querying.
 ```julia
 import CalibrateBeforeIT as CBit
 eurostat_path = "data/010_eurostat_tables"
-result = CBit.combine_figaro_tables(eurostat_path)
+result = CBit.combine_tables(eurostat_path)
 if result !== nothing
     println("Combined ", length(result.input_tables), " tables into ", result.output_file)
 else
@@ -384,14 +385,14 @@ else
 end
 ```
 """
-function combine_figaro_tables(eurostat_path::String;
-                              conn=nothing,
-                              input_tables=["naio_10_fcp_ii1", "naio_10_fcp_ii2",
-                                            "naio_10_fcp_ii3", "naio_10_fcp_ii4"],
-                              output_table="naio_10_fcp_ii",
-                              skip_if_missing=true)
+function combine_tables(eurostat_path::String;
+    conn=nothing,
+    input_tables=["naio_10_fcp_ii1", "naio_10_fcp_ii2",
+                  "naio_10_fcp_ii3", "naio_10_fcp_ii4"],
+    output_table="naio_10_fcp_ii",
+    skip_if_missing=true)
 
-    @info "=> Combining FIGARO tables: $(join(input_tables, ", ")) → $output_table"
+    @info "=> Combining multiple tables: $(join(input_tables, ", ")) → $output_table"
 
     # Validate inputs
     if isempty(input_tables)
@@ -400,8 +401,8 @@ function combine_figaro_tables(eurostat_path::String;
 
     if !isdir(eurostat_path)
         if skip_if_missing
-            @warn "Could not combine FIGARO tables (directory does not exist): $eurostat_path"
-            @info "Skipping FIGARO combination - ensure save directory exists and input tables are downloaded"
+            @warn "Could not combine tables (directory does not exist): $eurostat_path"
+            @info "Skipping table combination - ensure save directory exists and input tables are downloaded"
             return nothing
         else
             throw(ArgumentError("Save path directory does not exist: $eurostat_path"))
@@ -422,8 +423,8 @@ function combine_figaro_tables(eurostat_path::String;
 
     if !isempty(missing_files)
         if skip_if_missing
-            @warn "Could not combine FIGARO tables (some files not found): $(join(missing_files, ", "))"
-            @info "Skipping FIGARO combination - ensure input tables are downloaded first"
+            @warn "Could not combine tables (some files not found): $(join(missing_files, ", "))"
+            @info "Skipping table combination - ensure input tables are downloaded first"
             return nothing
         else
             throw(ArgumentError("Missing input files: $(join(missing_files, ", "))"))
@@ -471,7 +472,7 @@ function combine_figaro_tables(eurostat_path::String;
         )
 
     catch e
-        error_msg = "Failed to combine FIGARO tables: $e"
+        error_msg = "Failed to combine tables: $e"
         @error error_msg
         throw(ProcessingError(error_msg))
 

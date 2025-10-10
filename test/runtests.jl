@@ -22,7 +22,7 @@ using Test
     end
 
     @testset "Calibration Tests" begin
-        include("params_and_initial_conditions.jl")
+        include("test_params_and_initial_conditions.jl")
     end
 
 end
