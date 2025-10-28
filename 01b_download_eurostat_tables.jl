@@ -3,6 +3,10 @@
 ## show the usual application
 
 cd(@__DIR__)
+using Revise
+using Pkg
+Pkg.activate(".")
+using DuckDB, Tables, DataFrames, JLD2
 
 import CalibrateBeforeIT as CBit
 

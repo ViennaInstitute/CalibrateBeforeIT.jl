@@ -10,6 +10,18 @@ using Dates
 using JLD2
 using StatsBase ## only for cov in get_params_and_initial_conditions
 
+export download_and_extract_zenodo_data, get_eurostat_table_ids
+
+# Zenodo configuration - TODO: Update these values when the record is published
+const ZENODO_ZIP_FILE = "data_eurostat_2025_10_09.zip"
+
+# NOTE: The current record ID (17304433) does not exist.
+# When the Zenodo record is created/published, update this URL.
+# For published records, use: https://zenodo.org/api/records/RECORD_ID/files/FILENAME/content
+ZENODO_URL = "https://zenodo.org/api/records/17304433/files/$(ZENODO_ZIP_FILE)/content"
+global zenodo_path = "data/010_zenodo_tables"
+
+
 # Eurostat table IDs required for calibration
 const ALL_EUROSTAT_TABLE_IDS = [
     "naio_10_fcp_ii1",
@@ -67,6 +79,7 @@ global calibration_output_path = "data/020_calibration_output"
 
 include("utils.jl")
 include("import_eurostat.jl")
+include("download_zenodo.jl")
 include("import_figaro_data.jl")
 include("import_data.jl")
 include("import_calibration_data.jl")
