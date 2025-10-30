@@ -10,7 +10,9 @@ using Dates
 using JLD2
 using StatsBase ## only for cov in get_params_and_initial_conditions
 
-export download_and_extract_zenodo_data, get_eurostat_table_ids
+export download_and_extract_zenodo_data, get_eurostat_table_ids,
+    combine_tables, pqfile, execute, execute_debug, extract_years,
+    linear_interp_extrap, unify_unemployment_rate_sources
 
 # Zenodo configuration - TODO: Update these values when the record is published
 const ZENODO_ZIP_FILE = "data_eurostat_2025_10_09.zip"
@@ -85,5 +87,6 @@ include("import_data.jl")
 include("import_calibration_data.jl")
 include("get_params_and_initial_conditions.jl")
 include("r2_to_nace64_conversion.jl")
+include("unify_unemployment_rate_sources.jl")
 
 end # module CalibrateBeforeIT
