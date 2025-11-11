@@ -40,9 +40,27 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     operating_surplus = figaro["operating_surplus"][:, T_calibration]
     firm_cash_quarterly = calibration_data["firm_cash_quarterly"][T_calibration_quarterly]
     firm_debt_quarterly = calibration_data["firm_debt_quarterly"][T_calibration_quarterly]
-    firm_interest = calibration_data["firm_interest"][T_calibration]
+
+    # Check if quarterly interest data available and load accordingly
+    has_quarterly_firm_interest = haskey(calibration_data, "firm_interest_quarterly")
+    has_quarterly_govt_interest = haskey(calibration_data, "interest_government_debt_quarterly")
+
+    firm_interest_quarterly = if has_quarterly_firm_interest
+        calibration_data["firm_interest_quarterly"][T_calibration_quarterly]
+    else
+        @warn "Using annual 'firm_interest' with timescale conversion - please regenerate calibration data with quarterly data"
+        calibration_data["firm_interest"][T_calibration]
+    end
+
     government_debt_quarterly = calibration_data["government_debt_quarterly"][T_calibration_quarterly]
-    interest_government_debt = calibration_data["interest_government_debt"][T_calibration]
+
+    interest_government_debt_quarterly = if has_quarterly_govt_interest
+        calibration_data["interest_government_debt_quarterly"][T_calibration_quarterly]
+    else
+        @warn "Using annual 'interest_government_debt' with timescale conversion - please regenerate calibration data with quarterly data"
+        calibration_data["interest_government_debt"][T_calibration]
+    end
+
     government_consumption = figaro["government_consumption"][:, T_calibration]
     social_benefits = calibration_data["social_benefits"][T_calibration]
     unemployment_benefits = calibration_data["unemployment_benefits"][T_calibration]
@@ -138,6 +156,16 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     household_social_contributions = social_contributions - employers_social_contributions
     wages = compensation_employees * (1 - employers_social_contributions / sum(compensation_employees)) # Note: owerwrighting the wages variable here!
     household_income_tax = income_tax - corporate_tax
+
+    # Apply timescale conversion for annual interest data
+    # Must happen after timescale is calculated but before variables are used
+    if !has_quarterly_firm_interest
+        firm_interest_quarterly = timescale * firm_interest_quarterly
+    end
+    if !has_quarterly_govt_interest
+        interest_government_debt_quarterly = timescale * interest_government_debt_quarterly
+    end
+
     other_net_transfers = Bit.pos(
         sum(taxes_products_household) +
         sum(taxes_products_capitalformation_dwellings) +
@@ -148,7 +176,7 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
         household_social_contributions +
         household_income_tax +
         corporate_tax +
-        capital_taxes - social_benefits - sum(government_consumption) - interest_government_debt -
+        capital_taxes - social_benefits - sum(government_consumption) - interest_government_debt_quarterly -
         government_deficit,
     )
     disposable_income =
@@ -197,7 +225,8 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     # Matlab:
     # L=round(sum(firms)/(sum(exports-reexports)/sum(output)));
     L = matlab_round(sum(firms) / 2)
-    mu = timescale * firm_interest / firm_debt_quarterly - r_bar
+
+    mu = firm_interest_quarterly / firm_debt_quarterly - r_bar
     tau_INC =
         (household_income_tax + capital_taxes) /
         (sum(wages) + property_income + mixed_income - household_social_contributions)
@@ -206,12 +235,12 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
             sum(
                 Bit.pos(
                     timescale * operating_surplus -
-                    timescale * firm_interest * fixed_assets_other_than_dwellings /
+                    firm_interest_quarterly * fixed_assets_other_than_dwellings /
                     sum(fixed_assets_other_than_dwellings) +
                     r_bar * firm_cash_quarterly * Bit.pos(operating_surplus) /
                     sum(Bit.pos(operating_surplus)),
                 ),
-            ) + timescale * firm_interest - r_bar * (firm_debt_quarterly - bank_equity_quarterly)
+            ) + firm_interest_quarterly - r_bar * (firm_debt_quarterly - bank_equity_quarterly)
         )
     tau_VAT = taxes_products_household / sum(household_consumption)
     tau_SIF = employers_social_contributions / sum(wages)
@@ -226,15 +255,15 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
             sum(
                 Bit.pos(
                     timescale * operating_surplus -
-                    timescale * firm_interest * fixed_assets_other_than_dwellings /
+                    firm_interest_quarterly * fixed_assets_other_than_dwellings /
                     sum(fixed_assets_other_than_dwellings) +
                     r_bar * firm_cash_quarterly * Bit.pos(operating_surplus) /
                     sum(Bit.pos(operating_surplus)),
                 ),
-            ) + timescale * firm_interest - r_bar * (firm_debt_quarterly - bank_equity_quarterly) -
+            ) + firm_interest_quarterly - r_bar * (firm_debt_quarterly - bank_equity_quarterly) -
             timescale * corporate_tax
         )
-    r_G = timescale * interest_government_debt / government_debt_quarterly
+    r_G = interest_government_debt_quarterly / government_debt_quarterly
     theta_UB = 0.55 * (1 - tau_INC) * (1 - tau_SIW)
     theta = 0.05
     zeta = 0.03
@@ -253,6 +282,19 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
 
     rho, r_star, xi_pi, xi_gamma, pi_star = Bit.estimate_taylor_rule(a1, a2, a3)
 
+    # NOTE: Theoretically, estimating AR(1) processes on GROWTH RATES (geometric method)
+    # would be more appropriate than log-levels (arithmetic method) because:
+    # 1. Growth rates ensure proper mean-reverting AR(1) dynamics
+    # 2. Log-levels can exhibit near-unit-root behavior (random walk)
+    # 3. Growth rates match the actual economic process better
+    #
+    # Future improvement: Replace with growth rate estimation:
+    #   gamma_G_data = diff(log.(data["real_government_consumption_quarterly"][(T_estimation_exo - 1):T_calibration_exo]))
+    #   alpha_G, beta_G, sigma_G, epsilon_G = Bit.estimate_for_calibration_script(gamma_G_data)
+    # (and similarly for E and I)
+    #
+    # However, keeping original log-level method for now to maintain consistency
+    # with existing calibrations and model behavior.
 
     G_est =
         timescale * sum(government_consumption) .*
@@ -354,6 +396,7 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
         (sum(employees) + unemployed + inactive + sum(firms) + 1)
     D_H = household_cash_quarterly
     K_H = sum(dwellings)
+
     L_G = government_debt_quarterly
     E_k = bank_equity_quarterly
     E_CB = L_G + L_I - D_I - D_H - E_k

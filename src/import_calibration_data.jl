@@ -1,4 +1,4 @@
-
+# Firm imputation helper functions are defined in utils_firm_imputation.jl
 
 function import_calibration_data(geo, start_calibration_year, end_calibration_year,
                                  number_sectors, figaro)
@@ -103,8 +103,17 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT sum(value) FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector IN ('S11','S12') AND na_item='D41' AND direct='PAID' GROUP BY time ORDER BY time"
     calibration_data["firm_interest"]=execute(conn,sqlquery);
 
-    # sqlquery="SELECT sum(value) FROM '$(pqfile("nasq_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='CP_MEUR' AND sector IN ('S11','S12') AND na_item='D41' AND direct='PAID' AND s_adj='NSA' GROUP BY time ORDER BY time"
-    # calibration_data["firm_interest_quarterly"]=execute(conn,sqlquery);
+    # Try quarterly first, fall back to annual/4 approximation if missing
+    try
+        sqlquery="SELECT sum(value) FROM '$(pqfile("nasq_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='CP_MEUR' AND sector IN ('S11','S12') AND na_item='D41' AND direct='PAID' AND s_adj='NSA' GROUP BY time ORDER BY time"
+        calibration_data["firm_interest_quarterly"]=execute(conn,sqlquery);
+        if length(calibration_data["firm_interest_quarterly"]) == 0
+            throw(ErrorException("Empty result"))
+        end
+    catch e
+        @warn "  --> $(geo): Quarterly firm interest data not available ($(typeof(e))), will use annual data with timescale conversion"
+        # Don't create quarterly variable - will fall back to annual in get_params_and_initial_conditions.jl
+    end
 
     sqlquery="SELECT sum(value) FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector IN ('S11','S12') AND na_item='D51' AND direct='PAID' GROUP BY time ORDER BY time"
     calibration_data["corporate_tax"]=execute(conn,sqlquery);
@@ -117,11 +126,20 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
         calibration_data["capital_taxes"][ismissing.(calibration_data["capital_taxes"])] .= 0.0
     end
 
-    # sqlquery="SELECT value FROM '$(pqfile("gov_10q_ggnfa"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='D41PAY' AND s_adj='NSA' ORDER BY time"
-    # calibration_data["interest_government_debt_quarterly"]=execute(conn,sqlquery);
-
     sqlquery="SELECT value FROM '$(pqfile("gov_10a_main"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='D41PAY' ORDER BY time"
     calibration_data["interest_government_debt"]=execute(conn,sqlquery);
+
+    # Try quarterly first, fall back to annual/4 approximation if missing
+    try
+        sqlquery="SELECT value FROM '$(pqfile("gov_10q_ggnfa"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='D41PAY' AND s_adj='NSA' ORDER BY time"
+        calibration_data["interest_government_debt_quarterly"]=execute(conn,sqlquery);
+        if length(calibration_data["interest_government_debt_quarterly"]) == 0
+            throw(ErrorException("Empty result"))
+        end
+    catch e
+        @warn "  --> $(geo): Quarterly government interest data not available ($(typeof(e))), will use annual data with timescale conversion"
+        # Don't create quarterly variable - will fall back to annual in get_params_and_initial_conditions.jl
+    end
 
     sqlquery="SELECT value FROM '$(pqfile("gov_10a_exp"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S13' AND cofog99='GF1005' AND na_item='TE' ORDER BY time"
     calibration_data["unemployment_benefits"]=execute(conn,sqlquery);
@@ -170,6 +188,14 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     bd_9ac_l_form_r2_years = extract_years(conn, "bd_9ac_l_form_r2_a64", start_calibration_year);
     bd_l_form_years = extract_years(conn, "bd_l_form_a64", start_calibration_year);
 
+    # CRITICAL: Limit all year lists to calibration range BEFORE SQL queries
+    # extract_years() only filters >= start_year, NOT <= end_year
+    # Without this, SQL queries fetch data beyond end_calibration_year, causing reshape errors
+    filter!(y -> y <= end_calibration_year, sbs_na_sca_r2_years)
+    filter!(y -> y <= end_calibration_year, sbs_ovw_act_years)
+    filter!(y -> y <= end_calibration_year, bd_9ac_l_form_r2_years)
+    filter!(y -> y <= end_calibration_year, bd_l_form_years)
+
     ## Make sure that only extract data up until the last year that is available
     ## in both datasets
     latest_year_fully_available = min(maximum(bd_l_form_years), maximum(sbs_ovw_act_years))
@@ -213,9 +239,22 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     """
 
     calibration_data["firms"]=execute(conn,sqlquery);
-    number_firm_years = union(union(sbs_na_sca_r2_years, sbs_ovw_act_years),
-        union(bd_9ac_l_form_r2_years, bd_l_form_years)) |> length
+    # Track ACTUAL firm years for proper alignment with employee data
+    firm_years = sort(union(union(sbs_na_sca_r2_years, sbs_ovw_act_years),
+        union(bd_9ac_l_form_r2_years, bd_l_form_years)))
+
+    # CRITICAL: Filter to only years within calibration range
+    # extract_years() only filters >= start_year, NOT <= end_year
+    # This prevents firm_years from extending beyond all_years, which would cause
+    # firm_year_indices to contain 'nothing' values and crash
+    firm_years = filter(y -> start_calibration_year <= y <= end_calibration_year, firm_years)
+
+    number_firm_years = length(firm_years)
     calibration_data["firms"]=reshape(calibration_data["firms"],(number_sectors,number_firm_years));
+
+    # Create mapping from firm years to employee matrix column indices
+    # employees matrix has columns for all_years, firms matrix only for firm_years
+    firm_year_indices = [findfirst(==(y), all_years) for y in firm_years]
 
     ## Get all industries whose number of missing entries is more than 0 and
     ## less than the number of years minus 3 (so there are at least some entries
@@ -237,8 +276,10 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     end
 
     ## Find industries that still have missings (# missings > (number_years -
-    ## 3)): these industries will be imputed by assuming an average number of
-    ## employees and estimating the number of firms from the number of employees
+    ## 3)): these industries will be imputed using a hierarchical fallback strategy:
+    ## 1. Sector-specific ratios from peer EU countries
+    ## 2. Division-level average from other sectors in same NACE division
+    ## 3. Economy-wide average if no division data available
     industries_with_missings = 0 .< dropdims(sum(ismissing.(calibration_data["firms"]), dims = 2), dims = 2)
     indizes_with_missing = findall(!iszero, industries_with_missings)
     indizes_with_missing_str = create_year_array_str(indizes_with_missing)
@@ -246,14 +287,65 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     missing_industries = execute(conn, sqlquery)
 
     if length(missing_industries) > 0
-        @warn " --> $(geo): Nr firms in industries $(missing_industries) are still missing (will be imputed with avg nr of workers)"
+        @warn " --> $(geo): Nr firms in industries $(missing_industries) are still missing (will be imputed)"
     end
 
-    ## For all industries where we still do not have number of firms: calculate
-    ## the economy-wide average number of employees per firm and use that
-    ## average to estimate the number of firms from the number of employees
-    avg_number_of_employees = 10
-    calibration_data["firms"][ismissing.(calibration_data["firms"])]=round.(calibration_data["employees"][:, 1:number_firm_years][ismissing.(calibration_data["firms"])] / avg_number_of_employees);
+    ## Calculate economy-wide fallback ratio from sectors that DO have data
+    ## (instead of using arbitrary fixed value of 10)
+    non_missing_mask = .!ismissing.(calibration_data["firms"])
+    economy_wide_avg_employees_per_firm = if any(non_missing_mask)
+        total_employees = sum(calibration_data["employees"][:, firm_year_indices][non_missing_mask])
+        total_firms = sum(calibration_data["firms"][non_missing_mask])
+        total_firms > 0 ? total_employees / total_firms : 10.0
+    else
+        10.0  # Ultimate fallback if no firm data at all
+    end
+
+    ## For each industry with missing firm data, try peer country approach first
+    for (idx, industry_index) in enumerate(indizes_with_missing)
+        nace_code = missing_industries[idx]
+
+        # Try to get sector-specific ratio from peer countries
+        peer_ratio = calculate_sector_employees_per_firm_from_peers(
+            conn, nace_code, geo, years_str, number_years
+        )
+
+        if !isnothing(peer_ratio)
+            # Use peer country sector-specific ratio
+            employees_this_sector = calibration_data["employees"][industry_index, firm_year_indices]
+            calibration_data["firms"][industry_index, 1:number_firm_years] = round.(employees_this_sector / peer_ratio)
+            @info "  --> $(geo): Sector $(nace_code) using peer average: $(round(peer_ratio, digits=1)) employees/firm"
+        else
+            # Try division-level average as intermediate fallback
+            division_ratio = calculate_division_employees_per_firm(
+                conn, nace_code, geo,
+                calibration_data["employees"],
+                calibration_data["firms"],
+                number_sectors, number_firm_years,
+                firm_year_indices
+            )
+
+            if !isnothing(division_ratio)
+                # Use division-level average
+                employees_this_sector = calibration_data["employees"][industry_index, firm_year_indices]
+                calibration_data["firms"][industry_index, 1:number_firm_years] = round.(employees_this_sector / division_ratio)
+                division = string(first(filter(isletter, nace_code)))
+                @info "  --> $(geo): Sector $(nace_code) using division $(division) average: $(round(division_ratio, digits=1)) employees/firm"
+            else
+                # Fall back to economy-wide average for this country
+                employees_this_sector = calibration_data["employees"][industry_index, firm_year_indices]
+                calibration_data["firms"][industry_index, 1:number_firm_years] = round.(employees_this_sector / economy_wide_avg_employees_per_firm)
+
+                # NOTE: For agriculture sectors (A01-A03), firm counts are not collected in
+                # Eurostat SBS tables. An alternative would be to use FSS (Farm Structure Survey)
+                # tables like ef_m_farmleg for number of agricultural holdings, but this has
+                # conceptual issues (holdings ≠ firms). See comment in CalibrateBeforeIT.jl
+                # for full explanation of FSS alternative.
+
+                @warn "  --> $(geo): Sector $(nace_code) using economy-wide fallback: $(round(economy_wide_avg_employees_per_firm, digits=1)) employees/firm (no division data available)"
+            end
+        end
+    end
 
 
     output=dropdims(sum(figaro["intermediate_consumption"], dims=1), dims=1) +
