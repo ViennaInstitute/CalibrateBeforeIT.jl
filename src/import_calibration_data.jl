@@ -41,6 +41,9 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT value FROM '$(pqfile("nama_10_a64"))' WHERE nace_r2='TOTAL' AND time IN ($(years_str)) AND unit = 'CP_MEUR' AND na_item='D11' AND geo='$(geo)' ORDER BY time, nace_r2"
     calibration_data["wages"]=execute(conn,sqlquery);
 
+    # Sectoral wages (D11 = wages and salaries) - needed for employers_social_contributions calculation
+    sqlquery="SELECT value FROM '$(pqfile("nama_10_a64"))' WHERE nace_r2 IN (SELECT nace FROM '$(pqfile("nace64"))') AND time IN ($(years_str)) AND nace_r2 NOT IN ('T', 'U', 'L68A') AND unit = 'CP_MEUR' AND na_item='D11' AND geo='$(geo)' ORDER BY time, nace_r2"
+    calibration_data["wages_by_sector"]=execute(conn,sqlquery,(number_sectors,number_years));
 
     # sqlquery="SELECT value FROM '$(pqfile("nasa_10_f_bs"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S11' AND na_item='F2' AND finpos='ASS' AND co_nco='NCO' ORDER BY time"
     # calibration_data["firm_cash"]=execute(conn,sqlquery);
@@ -88,11 +91,17 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT value FROM '$(pqfile("gov_10a_main"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='B9' ORDER BY time"
     calibration_data["government_deficit"]=execute(conn,sqlquery);
 
-    # sqlquery="SELECT value FROM '$(pqfile("gov_10q_ggnfa"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='B9' AND s_adj='NSA' ORDER BY time"
-    # calibration_data["government_deficit_quarterly"]=execute(conn,sqlquery);
-
-    # sqlquery="SELECT value FROM '$(pqfile("nasq_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='CP_MEUR' AND sector='S13' AND na_item='B9' AND direct='PAID' AND s_adj='NSA' ORDER BY time"
-    # calibration_data["government_deficit_quarterly"]=execute(conn,sqlquery);
+    # Try quarterly government deficit first, fall back to annual if missing
+    try
+        sqlquery="SELECT value FROM '$(pqfile("gov_10q_ggnfa"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='B9' AND s_adj='NSA' ORDER BY time"
+        calibration_data["government_deficit_quarterly"]=execute(conn,sqlquery);
+        if length(calibration_data["government_deficit_quarterly"]) == 0
+            throw(ErrorException("Empty result"))
+        end
+    catch e
+        @warn "  --> $(geo): Quarterly government deficit data not available ($(typeof(e))), will use annual data"
+        # Don't create quarterly variable - will fall back to annual in get_params_and_initial_conditions.jl
+    end
 
     sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S14_S15' AND na_item='D4' AND direct='RECV' ORDER BY time"
     calibration_data["property_income"]=execute(conn,sqlquery);
@@ -162,11 +171,27 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT value FROM '$(pqfile("nama_10_an6"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND asset10='N111G' AND unit='CP_MEUR' ORDER BY time"
     calibration_data["gross_capitalformation_dwellings"]=execute(conn,sqlquery);
 
-    # sqlquery="SELECT value FROM '$(pqfile("cens_11an_r2"))' WHERE geo='$(geo)' AND wstatus='UNE' AND sex='T' AND nace_r2='TOTAL' AND unit='NR' AND age='TOTAL'"
-    # calibration_data["unemployed"]=execute(conn,sqlquery);
+    # Direct counts of unemployed and inactive from census (for OCM calibration)
+    # Census data is point-in-time (typically 2011), not a time series
+    try
+        sqlquery="SELECT value FROM '$(pqfile("cens_11an_r2"))' WHERE geo='$(geo)' AND wstatus='UNE' AND sex='T' AND nace_r2='TOTAL' AND unit='NR' AND age='TOTAL'"
+        result = execute(conn,sqlquery);
+        if length(result) > 0 && !ismissing(result[1])
+            calibration_data["unemployed_census"]=result[1];
+        end
+    catch e
+        @warn "  --> $(geo): Census unemployed count not available ($(typeof(e)))"
+    end
 
-    # sqlquery="SELECT sum(value) FROM '$(pqfile("cens_11an_r2"))' WHERE geo='$(geo)' AND wstatus='INAC' AND sex='T' AND nace_r2='TOTAL' AND unit='NR' AND age='TOTAL'"
-    # calibration_data["inactive"]=execute(conn,sqlquery);
+    try
+        sqlquery="SELECT sum(value) FROM '$(pqfile("cens_11an_r2"))' WHERE geo='$(geo)' AND wstatus='INAC' AND sex='T' AND nace_r2='TOTAL' AND unit='NR' AND age='TOTAL'"
+        result = execute(conn,sqlquery);
+        if length(result) > 0 && !ismissing(result[1])
+            calibration_data["inactive_census"]=result[1];
+        end
+    catch e
+        @warn "  --> $(geo): Census inactive count not available ($(typeof(e)))"
+    end
 
     sqlquery="SELECT 1e3*value FROM '$(pqfile("nama_10_pe"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='THS_PER' AND na_item='POP_NC' ORDER BY time"
     calibration_data["population"]=execute(conn,sqlquery);
