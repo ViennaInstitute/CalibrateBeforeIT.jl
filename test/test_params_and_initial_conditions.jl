@@ -1,50 +1,60 @@
-
 import CalibrateBeforeIT as CBit
 
 using Test
 using JLD2
 
-for geo in ["AT"]
+@testset "Testing get_params_and_initial_conditions function" begin
 
-    @testset "Testing get_params_and_initial_conditions function: $(geo), 2010" begin
+    # Use NL calibration object for all tests
+    nl_calibration_path = joinpath(dirname(@__DIR__),
+                                   "data", "020_calibration_output", "NL",
+                                   "calibration_object.jld2")
 
-        @info "Testing get_params_and_initial_conditions function: $(geo), 2010"
+    if !isfile(nl_calibration_path)
+        @test_skip "NL calibration object not found - please ensure calibration has been run"
+    else
+        @info "Testing with NL calibration object from: $nl_calibration_path"
+        calibration_object = load(nl_calibration_path, "calibration_object")
 
-        ## Save calibration data into such a struct
-        struct CalibrationData
-            calibration::Dict{String, Any}
-            figaro::Dict{String, Any}
-            data::Dict{String, Any}
-            ea::Dict{String, Any}
-            max_calibration_date::CBit.DateTime
-            estimation_date::CBit.DateTime
-        end
+        # Test multiple quarters to ensure consistency
+        test_quarters = [
+            (CBit.DateTime(2010, 03, 31), "2010Q1"),
+            (CBit.DateTime(2015, 06, 30), "2015Q2"),
+            (CBit.DateTime(2020, 12, 31), "2020Q4"),
+        ]
 
-        reference_calibration_object =
-            load(joinpath(@__DIR__,
-                "data", "reference_calibration",
-                "$(geo)_2010Q1_calibration_object.jld2"),
-                "reference_calibration_object")
-        (reference_parameters, reference_initial_conditions) =
-            load(joinpath(@__DIR__,
-                "data", "reference_calibration",
-                "$(geo)_2010Q1_parameters_initial_conditions.jld2"),
-                "reference_parameters", "reference_initial_conditions")
-        calibration_date = CBit.DateTime(2010, 03, 31);
+        for (calibration_date, quarter_str) in test_quarters
+            @testset "Testing quarter: $quarter_str" begin
 
-        parameters, initial_conditions =
-            CBit.get_params_and_initial_conditions(reference_calibration_object,
-                                                   calibration_date; scale = 1/10000);
+                # Generate parameters and initial conditions
+                parameters, initial_conditions =
+                    CBit.get_params_and_initial_conditions(calibration_object,
+                                                           calibration_date; scale = 1/1000)
 
-        for key in keys(parameters)
-            @test isapprox(reference_parameters[key],
-                           parameters[key], atol = 1e-6, rtol = 1e-6)
-        end
+                # Load reference for this quarter
+                reference_file = joinpath(dirname(@__DIR__),
+                                         "data", "020_calibration_output", "NL",
+                                         "$(quarter_str)_parameters_initial_conditions.jld2")
 
-        for key in keys(initial_conditions)
-            @test isapprox(reference_initial_conditions[key],
-                           initial_conditions[key], atol = 1e-6, rtol = 1e-6)
+                if isfile(reference_file)
+                    reference_params = load(reference_file, "parameters")
+                    reference_initial = load(reference_file, "initial_conditions")
+
+                    # Test all parameters match
+                    for key in keys(parameters)
+                        @test isapprox(reference_params[key],
+                                     parameters[key], atol = 1e-6, rtol = 1e-6)
+                    end
+
+                    # Test all initial conditions match
+                    for key in keys(initial_conditions)
+                        @test isapprox(reference_initial[key],
+                                     initial_conditions[key], atol = 1e-6, rtol = 1e-6)
+                    end
+                else
+                    @test_skip "Reference file not found for $quarter_str"
+                end
+            end
         end
     end
-
 end

@@ -19,10 +19,21 @@ function pqfile(table_id::String)::String
 end
 
 # Database query utilities
-function execute(conn, query::String)::Vector
-    # Execute SQL query and return first column as vector
-    res = values(columntable(DBInterface.execute(conn, query)))[1]
-    return res
+function execute(conn, query::String)
+    # Execute SQL query and return appropriate type based on column count
+    # - Single column: Returns Vector (backward compatible)
+    # - Multiple columns: Returns DataFrame (supports field access)
+    result = DBInterface.execute(conn, query)
+    ct = columntable(result)
+    cols = values(ct)
+
+    if length(cols) == 1
+        # Single column -> Vector (backward compatible!)
+        return cols[1]
+    else
+        # Multiple columns -> DataFrame (supports iteration + field access)
+        return DataFrame(ct)
+    end
 end
 
 function execute(conn, query::String, dims::Tuple{Vararg{Int}})::Array

@@ -13,7 +13,8 @@ import CalibrateBeforeIT as CBit
         table_ids = CBit.get_eurostat_table_ids()
 
         @test isa(table_ids, Vector{String})
-        @test length(table_ids) == 29
+        @test length(table_ids) == 32
+        @test "cens_11an_r2" in table_ids  # Census data for unemployed/inactive
         @test "naio_10_fcp_ii1" in table_ids
         @test "naio_10_fcp_ii2" in table_ids
         @test "naio_10_fcp_ii3" in table_ids
@@ -24,7 +25,7 @@ import CalibrateBeforeIT as CBit
         table_ids_copy = CBit.get_eurostat_table_ids()
         push!(table_ids_copy, "test_table")
         original_ids = CBit.get_eurostat_table_ids()
-        @test length(original_ids) == 29  # Should not be modified
+        @test length(original_ids) == 32  # Should not be modified
     end
 
     @testset "FIGARO Data Processing" begin

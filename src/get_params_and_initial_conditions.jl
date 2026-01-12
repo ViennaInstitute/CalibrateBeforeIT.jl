@@ -66,7 +66,7 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     unemployment_benefits = calibration_data["unemployment_benefits"][T_calibration]
     pension_benefits = calibration_data["pension_benefits"][T_calibration]
     corporate_tax = calibration_data["corporate_tax"][T_calibration]
-    wages = calibration_data["wages"][T_calibration]
+    wages_by_sector = calibration_data["wages_by_sector"][:, T_calibration]  # Sectoral wages (D11)
     taxes_products_household = figaro["taxes_products_household"][T_calibration]
     social_contributions = calibration_data["social_contributions"][T_calibration]
     income_tax = calibration_data["income_tax"][T_calibration]
@@ -76,7 +76,18 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     taxes_products_government = figaro["taxes_products_government"][T_calibration]
     bank_equity_quarterly = calibration_data["bank_equity_quarterly"][T_calibration_quarterly]
     taxes_products = figaro["taxes_products"][:, T_calibration]
+    # Zero out sector-level product taxes to match MATLAB calibration
+    # MATLAB (Line 108 in get_params_and_initial_conditions.m): taxes_products=zeros(size(taxes_products));
+    # This ensures tau_Y_s = 0 for all sectors, with all product taxes flowing through
+    # final demand taxes (tau_VAT, tau_CF, tau_G, tau_EXPORT) instead.
+    taxes_products = zeros(eltype(taxes_products), size(taxes_products))
     government_deficit = calibration_data["government_deficit"][T_calibration]
+    has_quarterly_govt_deficit = haskey(calibration_data, "government_deficit_quarterly")
+    government_deficit_quarterly = if has_quarterly_govt_deficit
+        calibration_data["government_deficit_quarterly"][T_calibration_quarterly]
+    else
+        government_deficit  # Use annual value (will be scaled by timescale later)
+    end
     firms = calibration_data["firms"][:, T_calibration]
     employees = calibration_data["employees"][:, T_calibration]
     population = calibration_data["population"][T_calibration]
@@ -84,10 +95,16 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
 
     omega = 0.85
 
-    # Calculate variables from accounting indentities
+    # Ensure intermediate_consumption is non-negative (robustness)
+    intermediate_consumption = max.(0, intermediate_consumption)
+
+    # Calculate variables from accounting identity
+    # Output = IC + Compensation + GROSS_Operating_Surplus + Production_Taxes + Product_Taxes
+    # Note: FIGARO's B2A3G is GROSS operating surplus (includes CFC/depreciation)
+    # Therefore, we do NOT add capital_consumption separately (would double-count)
     output =
         sum(intermediate_consumption, dims = 1)' .+ taxes_products .+ taxes_production .+ compensation_employees .+
-        operating_surplus# .+ capital_consumption #TODO: check whether this is this needed or not
+        operating_surplus
     output = output[:, 1]
 
     ## If fixed_assets and dwellings are given on industry-level
@@ -116,7 +133,9 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     unemployment_rate_quarterly = data["unemployment_rate_quarterly"][T_calibration_exo]
     operating_surplus = operating_surplus - capital_consumption
     taxes_products_export = 0 # TODO: unelegant hard coded zero
-    employers_social_contributions = min(social_contributions, sum(compensation_employees) - wages)
+    # Employers' social contributions (D12) = Compensation (D1) - Wages (D11)
+    # Using sectoral wages_by_sector to get vector by sector (matching OCM approach)
+    employers_social_contributions = compensation_employees - wages_by_sector
     fixed_capitalformation = Bit.pos(fixed_capitalformation)
     gross_capitalformation_dwellings = calibration_data["gross_capitalformation_dwellings"][T_calibration]
     taxes_products_capitalformation_dwellings =
@@ -153,11 +172,11 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
         capitalformation_dwellings +
         exports - output,
     )
-    household_social_contributions = social_contributions - employers_social_contributions
-    wages = compensation_employees * (1 - employers_social_contributions / sum(compensation_employees)) # Note: owerwrighting the wages variable here!
+    household_social_contributions = social_contributions - sum(employers_social_contributions)
+    wages = compensation_employees * (1 - sum(employers_social_contributions) / sum(compensation_employees))
     household_income_tax = income_tax - corporate_tax
 
-    # Apply timescale conversion for annual interest data
+    # Apply timescale conversion for annual interest/deficit data
     # Must happen after timescale is calculated but before variables are used
     if !has_quarterly_firm_interest
         firm_interest_quarterly = timescale * firm_interest_quarterly
@@ -165,25 +184,44 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     if !has_quarterly_govt_interest
         interest_government_debt_quarterly = timescale * interest_government_debt_quarterly
     end
+    if !has_quarterly_govt_deficit
+        government_deficit_quarterly = timescale * government_deficit_quarterly
+    end
 
+    # Government budget identity for other_net_transfers
+    # Note: interest and deficit are quarterly values, divide by timescale for annual-equivalent
+    # to match units with other annual variables (taxes, benefits, etc.)
     other_net_transfers = Bit.pos(
         sum(taxes_products_household) +
         sum(taxes_products_capitalformation_dwellings) +
         sum(taxes_products_export) +
         sum(taxes_products) +
         sum(taxes_production) +
-        employers_social_contributions +
+        sum(employers_social_contributions) +
         household_social_contributions +
         household_income_tax +
         corporate_tax +
-        capital_taxes - social_benefits - sum(government_consumption) - interest_government_debt_quarterly -
-        government_deficit,
+        capital_taxes - social_benefits - sum(government_consumption) -
+        interest_government_debt_quarterly / timescale -
+        government_deficit_quarterly / timescale,
     )
     disposable_income =
         sum(wages) + mixed_income + property_income + social_benefits + other_net_transfers -
         household_social_contributions - household_income_tax - capital_taxes
-    unemployed = matlab_round((unemployment_rate_quarterly * sum(employees)) / (1 - unemployment_rate_quarterly))
-    inactive = population - sum(max.(max.(1, firms), employees)) - unemployed - sum(max.(1, firms)) - 1
+
+    # Get unemployed and inactive counts
+    # Prefer census counts if available, otherwise calculate from rates
+    unemployed = if haskey(calibration_data, "unemployed_census")
+        calibration_data["unemployed_census"]
+    else
+        matlab_round((unemployment_rate_quarterly * sum(employees)) / (1 - unemployment_rate_quarterly))
+    end
+
+    inactive = if haskey(calibration_data, "inactive_census")
+        calibration_data["inactive_census"]
+    else
+        population - sum(max.(max.(1, firms), employees)) - unemployed - sum(max.(1, firms)) - 1
+    end
 
 
     # Scale number of firms and employees
@@ -203,6 +241,7 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     w_s = timescale * wages ./ employees
     tau_Y_s = taxes_products ./ output
     tau_K_s = taxes_production ./ output
+    delta_S_s = ones(G)  # Inventory adjustment speed (uniform across sectors, matches MATLAB)
     b_CF_g = fixed_capital_formation_other_than_dwellings / sum(fixed_capital_formation_other_than_dwellings)
     b_CFH_g = capitalformation_dwellings / sum(capitalformation_dwellings)
     b_HH_g = household_consumption / sum(household_consumption)
@@ -243,7 +282,7 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
             ) + firm_interest_quarterly - r_bar * (firm_debt_quarterly - bank_equity_quarterly)
         )
     tau_VAT = taxes_products_household / sum(household_consumption)
-    tau_SIF = employers_social_contributions / sum(wages)
+    tau_SIF = sum(employers_social_contributions) / sum(wages)
     tau_SIW = household_social_contributions / sum(wages)
     tau_EXPORT = sum(taxes_products_export) / sum(exports - reexports)
     tau_CF = sum(taxes_products_capitalformation_dwellings) / sum(capitalformation_dwellings)
@@ -354,6 +393,7 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
         "w_s" => w_s,
         "tau_Y_s" => tau_Y_s,
         "tau_K_s" => tau_K_s,
+        "delta_S_s" => delta_S_s,
         "b_CF_g" => b_CF_g,
         "b_CFH_g" => b_CFH_g,
         "b_HH_g" => b_HH_g,

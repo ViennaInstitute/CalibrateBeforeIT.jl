@@ -9,6 +9,7 @@
 cd(@__DIR__)
 
 import CalibrateBeforeIT as CBit
+using JLD2
 
 ## Set some parameters for the data-downloading process. `eurostat_path` is already
 ## set to a default directory value, which can be re-set here:
@@ -46,7 +47,7 @@ number_sectors = 62;
 # HR: 2010-2012
 # MT
 all_countries = ["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "NL", "PL", "PT", "RO", "SE", "SI", "SK"]
-
+#all_countries = ["NL"]
 ## This step does the same queries as step 5 with import_data(), but with geo ==
 ## "EA19". Only difference is that with EA19, unemployment rates are not used
 ea_data = CBit.import_data("EA19", start_year, end_year)
@@ -99,7 +100,7 @@ for geo in all_countries
 
     ##------------------------------------------------------------
     @info "Step 8: Calculate the initial conditions and parameters"
-    for calibration_year in 2020:end_calibration_year
+    for calibration_year in start_calibration_year:end_calibration_year
         for calibration_quarter in 1:4
             calibration_month = calibration_quarter * 3
             calibration_date = CBit.DateTime(calibration_year, calibration_month,
@@ -107,7 +108,7 @@ for geo in all_countries
 
             parameters, initial_conditions =
                 CBit.get_params_and_initial_conditions(calibration_object,
-                    calibration_date; scale = 1/10000);
+                    calibration_date; scale = 1/1000);
 
             # @info "Calibrated $(geo) $(calibration_year)Q$(calibration_quarter)"
 

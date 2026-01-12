@@ -74,7 +74,9 @@ function import_figaro_data(geo,
     sqlquery="SELECT value FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_use='P3_S13' AND ind_ava='D21X31' AND time IN ($(years_str)) ORDER BY time";
     figaro["taxes_products_government"]=execute(conn,sqlquery);
 
-    # figaro["taxes_products_export"]=zeros(size(figaro["taxes_products_household"]));
+    # Taxes on products for exports (P6 = exports)
+    sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_use='P6' AND ind_ava='D21X31' AND time IN ($(years_str)) GROUP BY time ORDER BY time";
+    figaro["taxes_products_export"]=execute(conn,sqlquery);
 
     # figaro["wages"]=0.825*figaro["compensation_employees"];
 

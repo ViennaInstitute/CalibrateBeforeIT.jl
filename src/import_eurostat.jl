@@ -352,9 +352,9 @@ Base.showerror(io::IO, e::ProcessingError) = print(io, "ProcessingError: ", e.me
                          output_table="naio_10_fcp_ii",
                          skip_if_missing=true)
 
-Combine the multiple tables into a single table.
+Combine multiple tables into a single table.
 
-For example, Eurostat splits the FIGARO IO tables into three separate tables by
+For example, Eurostat splits the FIGARO IO tables into multiple separate tables by
 time periods:
 - naio_10_fcp_ii1: 2010-2013
 - naio_10_fcp_ii2: 2014-2017

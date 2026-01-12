@@ -34,14 +34,33 @@ const ALL_EUROSTAT_TABLE_IDS = [
     "gov_10q_ggdebt",
     "gov_10a_main",
     "nasa_10_nf_tr",
+    "nasq_10_nf_tr",
+    "gov_10q_ggnfa",
     "gov_10a_exp",
     "nama_10_an6",
     "nama_10_a64_e",
     "sbs_na_sca_r2",
     "sbs_ovw_act",
     "bd_9ac_l_form_r2",
-    "bd_l_form"
+    "bd_l_form",
+    "cens_11an_r2"  # Census data for direct unemployed/inactive counts
 ]
+
+# NOTE: Agriculture sector (A01, A02, A03) firm counts are not available in SBS tables.
+# Current approach uses division-level or economy-wide employee/firm ratios as fallback.
+#
+# FUTURE ALTERNATIVE: Add Farm Structure Survey (FSS) tables:
+#   - "ef_m_farmleg"  # Farm indicators by legal status, size, type
+#   - "ef_kvftaa"     # Number of farms by utilized agricultural area
+#
+# However, FSS provides number of HOLDINGS (physical farms), not FIRMS (legal entities):
+#   - Holdings ≠ Firms: One company may own multiple holdings; one farmer may operate
+#     a holding without formal business registration
+#   - No NACE sector breakdown (A01/A02/A03) in FSS tables
+#   - Would require conceptual mapping between agricultural holdings and business firms
+#
+# For now, the division-level fallback provides sufficient accuracy given that
+# agriculture represents a small share of most EU economies' total employment.
 
 """
     get_eurostat_table_ids()
@@ -66,11 +85,13 @@ global eurostat_path = "data/010_eurostat_tables"
 global calibration_output_path = "data/020_calibration_output"
 
 include("utils.jl")
+include("utils_firm_imputation.jl")
 include("import_eurostat.jl")
 include("import_figaro_data.jl")
 include("import_data.jl")
 include("import_calibration_data.jl")
 include("get_params_and_initial_conditions.jl")
+include("get_params_and_initial_conditions_netherlands_ocm.jl")
 include("r2_to_nace64_conversion.jl")
 
 end # module CalibrateBeforeIT

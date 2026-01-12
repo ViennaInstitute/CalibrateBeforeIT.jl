@@ -142,12 +142,17 @@ function get_params_and_initial_conditions_netherlands_ocm(
     # Zero out sector-level product taxes (same as standard calibration)
     taxes_products = zeros(eltype(taxes_products), size(taxes_products))
 
-    # Calculate output from accounting identity
-    # OCM KEY DIFFERENCE #2: capital_consumption is NOT added here
+    # =========================================================================
+    # OCM KEY DIFFERENCE #2: Output calculation does NOT add capital_consumption
+    # =========================================================================
+    # Output = IC + Compensation + GROSS_Operating_Surplus + Production_Taxes + Product_Taxes
+    # Note: FIGARO's B2A3G is GROSS operating surplus (includes CFC/depreciation)
+    # Therefore, we do NOT add capital_consumption separately (would double-count)
+    # OCM: compensation_employees already includes mixed_income (self-employed treated as employees)
     intermediate_consumption = max.(0, intermediate_consumption)
     output =
         sum(intermediate_consumption, dims = 1)' .+ taxes_products .+ taxes_production .+ compensation_employees .+
-        operating_surplus .+ capital_consumption
+        operating_surplus
     output = output[:, 1]
 
     # Fixed assets handling
@@ -190,10 +195,13 @@ function get_params_and_initial_conditions_netherlands_ocm(
         (1 - 1 / (1 + taxes_products_fixed_capitalformation / sum(fixed_capitalformation)))
 
     # Timescale: ratio of quarterly GDP to annual FIGARO output
+    # Note: OCM keeps operating_surplus as GROSS (no CFC subtraction), so we do NOT add
+    # capital_consumption separately here (would double-count since B2A3G already includes CFC)
+    # Compare to standard version which subtracts CFC from OS then adds it back here.
     timescale =
         data["nominal_gdp_quarterly"][T_calibration_exo] / (
             sum(
-                compensation_employees .+ operating_surplus .+ capital_consumption .+ taxes_production .+
+                compensation_employees .+ operating_surplus .+ taxes_production .+
                 taxes_products,
             ) .+ taxes_products_household .+ taxes_products_capitalformation_dwellings .+ taxes_products_government .+
             taxes_products_export
@@ -561,19 +569,21 @@ function get_params_and_initial_conditions_netherlands_ocm(
 
     r_bar_series = (data["euribor"][T_estimation_exo:min(T_calibration_exo + T, T_calibration_exo_max)] .+ 1.0) .^ (1.0 / 4.0) .- 1
 
-    # Load index prices from CSV if path provided
-    # Expected format: Date (YYYY-MM-DD), Open, High, Low, Close, Adj Close, Volume
+    # Load composite r_k series from CSV if path provided
+    # Expected format: Year, Quarter, r_housing, r_equity, w_housing, w_equity, r_k_composite
     index_prices = if !isnothing(composite_rk_path) && isfile(composite_rk_path)
         df_composite = CSV.read(composite_rk_path, DataFrame)
 
-        # Parse Date column (format: YYYY-MM-DD)
-        df_composite[!, :ParsedDate] = Date.(df_composite.Date)
+        # Filter quarters before calibration date
+        cal_year = Dates.year(calibration_date)
+        cal_quarter = Dates.quarterofyear(calibration_date)
+        df_filtered = df_composite[
+            (df_composite.Year .< cal_year) .|
+            ((df_composite.Year .== cal_year) .& (df_composite.Quarter .< cal_quarter)),
+        :]
 
-        # Filter data before calibration date
-        df_filtered = df_composite[df_composite.ParsedDate .< Date(calibration_date), :]
-
-        # Use Adj Close as the index price
-        Vector{Float64}(df_filtered[!, "Adj Close"])
+        # Use r_k_composite as the return on capital series
+        Vector{Float64}(df_filtered[!, "r_k_composite"])
     else
         Float64[]  # Empty array if no path provided
     end

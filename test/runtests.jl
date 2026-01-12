@@ -25,4 +25,21 @@ using Test
         include("test_params_and_initial_conditions.jl")
     end
 
+    @testset "Netherlands OCM Calibration Tests" begin
+        include("test_params_and_initial_conditions_netherlands_ocm.jl")
+    end
+
+    @testset "Calibration Data Tests" begin
+        include("test_calibration_data.jl")
+    end
+
+    # Only run validation tests if calibration output exists
+    if isdir(joinpath(dirname(@__DIR__), "data", "020_calibration_output"))
+        @testset "Calibration Validation Tests" begin
+            include("test_calibration_validation.jl")
+        end
+    else
+        @info "Skipping calibration validation tests (no calibration output found)"
+    end
+
 end

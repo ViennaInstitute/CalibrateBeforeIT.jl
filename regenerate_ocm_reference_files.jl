@@ -47,7 +47,8 @@ for year in 2010:2019
         try
             params, initial_conditions = CBit.get_params_and_initial_conditions_netherlands_ocm(
                 calibration_object,
-                calibration_date
+                calibration_date;
+                composite_rk_path = joinpath(@__DIR__, "data/composite_rk_1995_2024.csv")
             )
 
             # Save to JLD2 files (params and initial_conditions are Dicts with String keys)
