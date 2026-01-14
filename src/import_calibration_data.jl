@@ -45,6 +45,33 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT value FROM '$(pqfile("nama_10_a64"))' WHERE nace_r2 IN (SELECT nace FROM '$(pqfile("nace64"))') AND time IN ($(years_str)) AND nace_r2 NOT IN ('T', 'U', 'L68A') AND unit = 'CP_MEUR' AND na_item='D11' AND geo='$(geo)' ORDER BY time, nace_r2"
     calibration_data["wages_by_sector"]=execute(conn,sqlquery,(number_sectors,number_years));
 
+    # Impute missing sectoral wages using FIGARO compensation data
+    # D1 (compensation) = D11 (wages) + D12 (employers' social contributions)
+    # For sectors with missing D11, estimate using economy-wide wages/compensation ratio
+    wages_by_sector = calibration_data["wages_by_sector"]
+    compensation_employees = figaro["compensation_employees"]  # From FIGARO (D1)
+    if any(ismissing.(wages_by_sector))
+        for yr_idx in 1:size(wages_by_sector, 2)
+            missing_mask = ismissing.(wages_by_sector[:, yr_idx])
+            if any(missing_mask)
+                # Calculate economy-wide wages/compensation ratio from known sectors
+                known_wages = collect(skipmissing(wages_by_sector[:, yr_idx]))
+                known_comp = compensation_employees[.!missing_mask, yr_idx]
+                if !isempty(known_wages) && sum(known_comp) > 0
+                    wages_ratio = sum(known_wages) / sum(known_comp)
+                    # Impute missing wages using this ratio
+                    for (i, is_missing) in enumerate(missing_mask)
+                        if is_missing
+                            wages_by_sector[i, yr_idx] = compensation_employees[i, yr_idx] * wages_ratio
+                        end
+                    end
+                    @info "  --> $(geo): Imputed $(sum(missing_mask)) missing wages_by_sector values for year index $(yr_idx) using ratio $(round(wages_ratio, digits=3))"
+                end
+            end
+        end
+        calibration_data["wages_by_sector"] = wages_by_sector
+    end
+
     # sqlquery="SELECT value FROM '$(pqfile("nasa_10_f_bs"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S11' AND na_item='F2' AND finpos='ASS' AND co_nco='NCO' ORDER BY time"
     # calibration_data["firm_cash"]=execute(conn,sqlquery);
 

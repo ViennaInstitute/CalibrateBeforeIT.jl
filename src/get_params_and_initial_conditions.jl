@@ -42,8 +42,13 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     firm_debt_quarterly = calibration_data["firm_debt_quarterly"][T_calibration_quarterly]
 
     # Check if quarterly interest data available and load accordingly
-    has_quarterly_firm_interest = haskey(calibration_data, "firm_interest_quarterly")
-    has_quarterly_govt_interest = haskey(calibration_data, "interest_government_debt_quarterly")
+    # Must verify: (1) key exists, (2) vector is long enough, (3) value at index is not missing
+    has_quarterly_firm_interest = haskey(calibration_data, "firm_interest_quarterly") &&
+        length(calibration_data["firm_interest_quarterly"]) >= T_calibration_quarterly &&
+        !ismissing(calibration_data["firm_interest_quarterly"][T_calibration_quarterly])
+    has_quarterly_govt_interest = haskey(calibration_data, "interest_government_debt_quarterly") &&
+        length(calibration_data["interest_government_debt_quarterly"]) >= T_calibration_quarterly &&
+        !ismissing(calibration_data["interest_government_debt_quarterly"][T_calibration_quarterly])
 
     firm_interest_quarterly = if has_quarterly_firm_interest
         calibration_data["firm_interest_quarterly"][T_calibration_quarterly]
@@ -82,7 +87,9 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     # final demand taxes (tau_VAT, tau_CF, tau_G, tau_EXPORT) instead.
     taxes_products = zeros(eltype(taxes_products), size(taxes_products))
     government_deficit = calibration_data["government_deficit"][T_calibration]
-    has_quarterly_govt_deficit = haskey(calibration_data, "government_deficit_quarterly")
+    has_quarterly_govt_deficit = haskey(calibration_data, "government_deficit_quarterly") &&
+        length(calibration_data["government_deficit_quarterly"]) >= T_calibration_quarterly &&
+        !ismissing(calibration_data["government_deficit_quarterly"][T_calibration_quarterly])
     government_deficit_quarterly = if has_quarterly_govt_deficit
         calibration_data["government_deficit_quarterly"][T_calibration_quarterly]
     else
@@ -239,8 +246,16 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     delta_s = timescale * capital_consumption ./ fixed_assets_other_than_dwellings / omega
     replace!(delta_s, NaN => 0.0)
     w_s = timescale * wages ./ employees
+    # Handle NaN for sectors with zero employees or fixed assets
+    replace!(alpha_s, NaN => 0.0)
+    replace!(kappa_s, NaN => 0.0)
+    replace!(w_s, NaN => 0.0)
+    replace!(beta_s, NaN => 0.0)
     tau_Y_s = taxes_products ./ output
     tau_K_s = taxes_production ./ output
+    # Handle NaN for sectors with zero output
+    replace!(tau_Y_s, NaN => 0.0)
+    replace!(tau_K_s, NaN => 0.0)
     delta_S_s = ones(G)  # Inventory adjustment speed (uniform across sectors, matches MATLAB)
     b_CF_g = fixed_capital_formation_other_than_dwellings / sum(fixed_capital_formation_other_than_dwellings)
     b_CFH_g = capitalformation_dwellings / sum(capitalformation_dwellings)
