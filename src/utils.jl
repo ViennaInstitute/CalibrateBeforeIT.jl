@@ -20,7 +20,6 @@ end
 
 # Database query utilities
 function execute(conn, query::String)::Vector
-    # Execute SQL query and return first column as vector
     res = values(columntable(DBInterface.execute(conn, query)))[1]
     return res
 end
@@ -39,19 +38,23 @@ function execute_debug(conn, query::String)::DataFrame
     return res
 end
 
-function extract_years(conn, table_id::String, start_calibration_year::Int64)::Vector{Int64}
+function extract_years(conn, table_id::String, start_calibration_year::Int64, end_calibration_year::Int64)::Vector{Int64}
     sqlquery = "SELECT DISTINCT time FROM '$(pqfile(table_id))' ORDER BY time"
     res_years = try
         parse.(Int64, execute(conn, sqlquery))
     catch e
         error("Failed to parse years from the database: $e")
     end
-    filter!(x -> x >= start_calibration_year, res_years)
+    filter!(x -> x >= start_calibration_year && x <= end_calibration_year, res_years)
     return res_years
 end
 
+function extract_years(conn, table_id::String, start_calibration_year::Int64)::Vector{Int64}
+    extract_years(conn, table_id, start_calibration_year, typemax(Int64))
+end
+
 function extract_years(conn, table_id::String)::Vector{Int64}
-    extract_years(conn, table_id, typemin(Int64))
+    extract_years(conn, table_id, typemin(Int64), typemax(Int64))
 end
 
 create_year_array_str(all_years::Vector)::String = join(["'$(year)'" for year in all_years], ", ")

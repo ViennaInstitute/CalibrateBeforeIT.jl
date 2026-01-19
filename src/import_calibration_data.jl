@@ -41,6 +41,32 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT value FROM '$(pqfile("nama_10_a64"))' WHERE nace_r2='TOTAL' AND time IN ($(years_str)) AND unit = 'CP_MEUR' AND na_item='D11' AND geo='$(geo)' ORDER BY time, nace_r2"
     calibration_data["wages"]=execute(conn,sqlquery);
 
+    # Sectoral wages (D11) for employers_social_contributions calculation
+    sqlquery="SELECT value FROM '$(pqfile("nama_10_a64"))' WHERE nace_r2 IN (SELECT nace FROM '$(pqfile("nace64"))') AND time IN ($(years_str)) AND nace_r2 NOT IN ('T', 'U', 'L68A') AND unit = 'CP_MEUR' AND na_item='D11' AND geo='$(geo)' ORDER BY time, nace_r2"
+    calibration_data["wages_by_sector"]=execute(conn,sqlquery,(number_sectors,number_years));
+
+    # Impute missing sectoral wages using economy-wide wages/compensation ratio
+    wages_by_sector = calibration_data["wages_by_sector"]
+    compensation_employees = figaro["compensation_employees"]
+    if any(ismissing.(wages_by_sector))
+        for yr_idx in 1:size(wages_by_sector, 2)
+            missing_mask = ismissing.(wages_by_sector[:, yr_idx])
+            if any(missing_mask)
+                known_wages = collect(skipmissing(wages_by_sector[:, yr_idx]))
+                known_comp = compensation_employees[.!missing_mask, yr_idx]
+                if !isempty(known_wages) && sum(known_comp) > 0
+                    wages_ratio = sum(known_wages) / sum(known_comp)
+                    for (i, is_missing) in enumerate(missing_mask)
+                        if is_missing
+                            wages_by_sector[i, yr_idx] = compensation_employees[i, yr_idx] * wages_ratio
+                        end
+                    end
+                    @info "  --> $(geo): Imputed $(sum(missing_mask)) missing wages_by_sector values for year index $(yr_idx) using ratio $(round(wages_ratio, digits=3))"
+                end
+            end
+        end
+        calibration_data["wages_by_sector"] = wages_by_sector
+    end
 
     # sqlquery="SELECT value FROM '$(pqfile("nasa_10_f_bs"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S11' AND na_item='F2' AND finpos='ASS' AND co_nco='NCO' ORDER BY time"
     # calibration_data["firm_cash"]=execute(conn,sqlquery);
@@ -88,11 +114,17 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT value FROM '$(pqfile("gov_10a_main"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='B9' ORDER BY time"
     calibration_data["government_deficit"]=execute(conn,sqlquery);
 
-    # sqlquery="SELECT value FROM '$(pqfile("gov_10q_ggnfa"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='B9' AND s_adj='NSA' ORDER BY time"
-    # calibration_data["government_deficit_quarterly"]=execute(conn,sqlquery);
-
-    # sqlquery="SELECT value FROM '$(pqfile("nasq_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='CP_MEUR' AND sector='S13' AND na_item='B9' AND direct='PAID' AND s_adj='NSA' ORDER BY time"
-    # calibration_data["government_deficit_quarterly"]=execute(conn,sqlquery);
+    # Try quarterly government deficit first, fall back to annual if missing
+    try
+        sqlquery="SELECT value FROM '$(pqfile("gov_10q_ggnfa"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='B9' AND s_adj='NSA' ORDER BY time"
+        calibration_data["government_deficit_quarterly"]=execute(conn,sqlquery);
+        if length(calibration_data["government_deficit_quarterly"]) == 0
+            throw(ErrorException("Empty result"))
+        end
+    catch e
+        @warn "  --> $(geo): Quarterly government deficit data not available ($(typeof(e))), will use annual data"
+        # Don't create quarterly variable - will fall back to annual in get_params_and_initial_conditions.jl
+    end
 
     sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S14_S15' AND na_item='D4' AND direct='RECV' ORDER BY time"
     calibration_data["property_income"]=execute(conn,sqlquery);
@@ -103,8 +135,17 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT sum(value) FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector IN ('S11','S12') AND na_item='D41' AND direct='PAID' GROUP BY time ORDER BY time"
     calibration_data["firm_interest"]=execute(conn,sqlquery);
 
-    # sqlquery="SELECT sum(value) FROM '$(pqfile("nasq_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='CP_MEUR' AND sector IN ('S11','S12') AND na_item='D41' AND direct='PAID' AND s_adj='NSA' GROUP BY time ORDER BY time"
-    # calibration_data["firm_interest_quarterly"]=execute(conn,sqlquery);
+    # Try quarterly first, fall back to annual/4 approximation if missing
+    try
+        sqlquery="SELECT sum(value) FROM '$(pqfile("nasq_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='CP_MEUR' AND sector IN ('S11','S12') AND na_item='D41' AND direct='PAID' AND s_adj='NSA' GROUP BY time ORDER BY time"
+        calibration_data["firm_interest_quarterly"]=execute(conn,sqlquery);
+        if length(calibration_data["firm_interest_quarterly"]) == 0
+            throw(ErrorException("Empty result"))
+        end
+    catch e
+        @warn "  --> $(geo): Quarterly firm interest data not available ($(typeof(e))), will use annual data with timescale conversion"
+        # Don't create quarterly variable - will fall back to annual in get_params_and_initial_conditions.jl
+    end
 
     sqlquery="SELECT sum(value) FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector IN ('S11','S12') AND na_item='D51' AND direct='PAID' GROUP BY time ORDER BY time"
     calibration_data["corporate_tax"]=execute(conn,sqlquery);
@@ -117,11 +158,20 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
         calibration_data["capital_taxes"][ismissing.(calibration_data["capital_taxes"])] .= 0.0
     end
 
-    # sqlquery="SELECT value FROM '$(pqfile("gov_10q_ggnfa"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='D41PAY' AND s_adj='NSA' ORDER BY time"
-    # calibration_data["interest_government_debt_quarterly"]=execute(conn,sqlquery);
-
     sqlquery="SELECT value FROM '$(pqfile("gov_10a_main"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='D41PAY' ORDER BY time"
     calibration_data["interest_government_debt"]=execute(conn,sqlquery);
+
+    # Try quarterly first, fall back to annual/4 approximation if missing
+    try
+        sqlquery="SELECT value FROM '$(pqfile("gov_10q_ggnfa"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='D41PAY' AND s_adj='NSA' ORDER BY time"
+        calibration_data["interest_government_debt_quarterly"]=execute(conn,sqlquery);
+        if length(calibration_data["interest_government_debt_quarterly"]) == 0
+            throw(ErrorException("Empty result"))
+        end
+    catch e
+        @warn "  --> $(geo): Quarterly government interest data not available ($(typeof(e))), will use annual data with timescale conversion"
+        # Don't create quarterly variable - will fall back to annual in get_params_and_initial_conditions.jl
+    end
 
     sqlquery="SELECT value FROM '$(pqfile("gov_10a_exp"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S13' AND cofog99='GF1005' AND na_item='TE' ORDER BY time"
     calibration_data["unemployment_benefits"]=execute(conn,sqlquery);
@@ -144,11 +194,27 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT value FROM '$(pqfile("nama_10_an6"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND asset10='N111G' AND unit='CP_MEUR' ORDER BY time"
     calibration_data["gross_capitalformation_dwellings"]=execute(conn,sqlquery);
 
-    # sqlquery="SELECT value FROM '$(pqfile("cens_11an_r2"))' WHERE geo='$(geo)' AND wstatus='UNE' AND sex='T' AND nace_r2='TOTAL' AND unit='NR' AND age='TOTAL'"
-    # calibration_data["unemployed"]=execute(conn,sqlquery);
+    # Census data for unemployed/inactive (point-in-time fallback)
+    # Census data is typically from 2011, not a time series
+    try
+        sqlquery="SELECT value FROM '$(pqfile("cens_11an_r2"))' WHERE geo='$(geo)' AND wstatus='UNE' AND sex='T' AND nace_r2='TOTAL' AND unit='NR' AND age='TOTAL'"
+        result = execute(conn,sqlquery);
+        if length(result) > 0 && !ismissing(result[1])
+            calibration_data["unemployed_census"]=result[1];
+        end
+    catch e
+        @warn "  --> $(geo): Census unemployed count not available ($(typeof(e)))"
+    end
 
-    # sqlquery="SELECT sum(value) FROM '$(pqfile("cens_11an_r2"))' WHERE geo='$(geo)' AND wstatus='INAC' AND sex='T' AND nace_r2='TOTAL' AND unit='NR' AND age='TOTAL'"
-    # calibration_data["inactive"]=execute(conn,sqlquery);
+    try
+        sqlquery="SELECT sum(value) FROM '$(pqfile("cens_11an_r2"))' WHERE geo='$(geo)' AND wstatus='INAC' AND sex='T' AND nace_r2='TOTAL' AND unit='NR' AND age='TOTAL'"
+        result = execute(conn,sqlquery);
+        if length(result) > 0 && !ismissing(result[1])
+            calibration_data["inactive_census"]=result[1];
+        end
+    catch e
+        @warn "  --> $(geo): Census inactive count not available ($(typeof(e)))"
+    end
 
     sqlquery="SELECT 1e3*value FROM '$(pqfile("nama_10_pe"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='THS_PER' AND na_item='POP_NC' ORDER BY time"
     calibration_data["population"]=execute(conn,sqlquery);
@@ -164,11 +230,11 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     ## is that of bd_9ac_l_form, so we use these two datasets to extend the
     ## timeframe of firm population data.
 
-    ## Query which years are in respective data sources
-    sbs_na_sca_r2_years = extract_years(conn, "sbs_na_sca_r2_a64", start_calibration_year);
-    sbs_ovw_act_years = extract_years(conn, "sbs_ovw_act_a64", start_calibration_year);
-    bd_9ac_l_form_r2_years = extract_years(conn, "bd_9ac_l_form_r2_a64", start_calibration_year);
-    bd_l_form_years = extract_years(conn, "bd_l_form_a64", start_calibration_year);
+    ## Query which years are in respective data sources (filtered to calibration range)
+    sbs_na_sca_r2_years = extract_years(conn, "sbs_na_sca_r2_a64", start_calibration_year, end_calibration_year);
+    sbs_ovw_act_years = extract_years(conn, "sbs_ovw_act_a64", start_calibration_year, end_calibration_year);
+    bd_9ac_l_form_r2_years = extract_years(conn, "bd_9ac_l_form_r2_a64", start_calibration_year, end_calibration_year);
+    bd_l_form_years = extract_years(conn, "bd_l_form_a64", start_calibration_year, end_calibration_year);
 
     ## Make sure that only extract data up until the last year that is available
     ## in both datasets
@@ -217,12 +283,52 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
         union(bd_9ac_l_form_r2_years, bd_l_form_years)) |> length
     calibration_data["firms"]=reshape(calibration_data["firms"],(number_sectors,number_firm_years));
 
-    ## Get all industries whose number of missing entries is more than 0 and
-    ## less than the number of years minus 3 (so there are at least some entries
-    ## which we can use for imputation). We use linear interpolation to impute,
-    ## but log the values before and exponentiate them afterwards (also to avoid
-    ## predicting negative values). Finally, we assume that there is at least
-    ## one firm in every industry.
+    ## Farm Structure Survey for A01 (agriculture) - provides farm counts for survey years
+    try
+        firm_years = sort(collect(union(union(sbs_na_sca_r2_years, sbs_ovw_act_years),
+            union(bd_9ac_l_form_r2_years, bd_l_form_years))))
+        firm_years_str = create_year_array_str(firm_years)
+
+        sqlquery = """
+        SELECT time, SUM(value) as farms
+        FROM '$(pqfile("ef_m_farmleg"))'
+        WHERE geo='$(geo)'
+          AND indic_ef='HOLD'
+          AND leg_form='TOTAL'
+          AND so_eur='TOTAL'
+          AND uaa='TOTAL'
+          AND time IN ($(firm_years_str))
+        GROUP BY time
+        ORDER BY time
+        """
+        farm_survey = DBInterface.execute(conn, sqlquery) |> DataFrame
+
+        if nrow(farm_survey) > 1
+            farm_survey = filter(row -> !ismissing(row.farms), farm_survey)
+
+            if nrow(farm_survey) > 1
+                survey_year_indices = [findfirst(==(y), firm_years) for y in farm_survey.time]
+                survey_year_indices = filter(!isnothing, survey_year_indices)
+
+                if length(survey_year_indices) > 1
+                    survey_values = Float64.(farm_survey.farms[1:length(survey_year_indices)])
+                    all_firm_year_indices = collect(1:number_firm_years)
+
+                    interpolated_farms = max.(1, round.(linear_interp_extrap(
+                        survey_year_indices,
+                        survey_values,
+                        all_firm_year_indices)))
+
+                    calibration_data["firms"][1, :] = interpolated_farms
+                    @info " --> $(geo): Used Farm Structure Survey for A01 agriculture ($(length(survey_year_indices)) survey points)"
+                end
+            end
+        end
+    catch e
+        @warn " --> $(geo): Farm Structure Survey data not available for A01 ($(typeof(e))), will use fallback imputation"
+    end
+
+    ## Impute industries with some missing entries using linear interpolation
     industries_with_missings = 0 .< dropdims(sum(ismissing.(calibration_data["firms"]), dims = 2), dims = 2) .< (number_firm_years - 3)
     indizes_with_missing = findall(!iszero, industries_with_missings)
     all_time_indizes = collect(1:number_firm_years)
@@ -230,9 +336,10 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
         industry_values = calibration_data["firms"][industry_index, :]
         nonmissing_entries = all_time_indizes[.!ismissing.(industry_values)]
         @info " --> $(geo): Imputing nr of firms in industry $(industry_index): nr missing = $(sum(ismissing.(industry_values)))"
-        imputed_industry_values = max.(round.(exp.(linear_interp_extrap(nonmissing_entries,
-            log.(industry_values[nonmissing_entries]),
-            all_time_indizes))), 1)
+        imputed_industry_values = max.(1, round.(linear_interp_extrap(
+            nonmissing_entries,
+            Float64.(industry_values[nonmissing_entries]),
+            all_time_indizes)))
         calibration_data["firms"][industry_index, :] = imputed_industry_values
     end
 
@@ -249,11 +356,29 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
         @warn " --> $(geo): Nr firms in industries $(missing_industries) are still missing (will be imputed with avg nr of workers)"
     end
 
-    ## For all industries where we still do not have number of firms: calculate
-    ## the economy-wide average number of employees per firm and use that
-    ## average to estimate the number of firms from the number of employees
-    avg_number_of_employees = 10
-    calibration_data["firms"][ismissing.(calibration_data["firms"])]=round.(calibration_data["employees"][:, 1:number_firm_years][ismissing.(calibration_data["firms"])] / avg_number_of_employees);
+    ## Use sector-specific average employees per firm to estimate firm counts
+    sector_avg_employees = Dict(
+        1 => 5,    # A01 Agriculture
+        2 => 5,    # A02 Forestry
+        3 => 3,    # A03 Fishing
+        41 => 50,  # K64 Financial services
+        42 => 20,  # K65 Insurance
+        43 => 15,  # K66 Financial auxiliaries
+    )
+    default_avg_employees = 10
+
+    firms_matrix = calibration_data["firms"]
+    employees_subset = calibration_data["employees"][:, 1:number_firm_years]
+    for sector_idx in 1:number_sectors
+        for year_idx in 1:number_firm_years
+            if ismissing(firms_matrix[sector_idx, year_idx])
+                avg_emp = get(sector_avg_employees, sector_idx, default_avg_employees)
+                emp_count = employees_subset[sector_idx, year_idx]
+                firms_matrix[sector_idx, year_idx] = max(1, round(emp_count / avg_emp))
+            end
+        end
+    end
+    calibration_data["firms"] = firms_matrix
 
 
     output=dropdims(sum(figaro["intermediate_consumption"], dims=1), dims=1) +

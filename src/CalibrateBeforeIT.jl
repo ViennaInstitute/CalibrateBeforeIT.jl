@@ -12,7 +12,8 @@ using StatsBase ## only for cov in get_params_and_initial_conditions
 
 export download_and_extract_zenodo_data, get_eurostat_table_ids,
     combine_tables, pqfile, execute, execute_debug, extract_years,
-    linear_interp_extrap, unify_unemployment_rate_sources
+    linear_interp_extrap, unify_unemployment_rate_sources,
+    get_valid_calibration_quarters
 
 # Zenodo configuration - TODO: Update these values when the record is published
 const ZENODO_ZIP_FILE = "data_eurostat_2025_10_09.zip"
@@ -48,13 +49,17 @@ const ALL_EUROSTAT_TABLE_IDS = [
     "gov_10q_ggdebt",
     "gov_10a_main",
     "nasa_10_nf_tr",
+    "nasq_10_nf_tr",    # Quarterly non-financial transactions (firm interest quarterly)
+    "gov_10q_ggnfa",    # Quarterly government data (deficit, interest)
+    "cens_11an_r2",     # Census data for unemployed/inactive counts
     "gov_10a_exp",
     "nama_10_an6",
     "nama_10_a64_e",
     "sbs_na_sca_r2",
     "sbs_ovw_act",
     "bd_9ac_l_form_r2",
-    "bd_l_form"
+    "bd_l_form",
+    "ef_m_farmleg"      # Farm structure survey - farm counts for A01 agriculture
 ]
 
 """
