@@ -145,10 +145,10 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
 
     T_calibration = findall(
         calibration_data["years_num"] .== date2num(DateTime(year(min(calibration_date, max_calibration_date)), 12, 31)),
-    )[1] #[1]
-    T_calibration_quarterly = findall(calibration_data["quarters_num"] .== date2num(calibration_date))[1] #[2] # TODO: This indexing might not be correct
-    T_estimation_exo = findall(data["quarters_num"] .== date2num(estimation_date))[1] #[1]
-    T_calibration_exo = findall(data["quarters_num"] .== date2num(calibration_date))[1] #[1]
+    )[1][1]
+    T_calibration_quarterly = findall(calibration_data["quarters_num"] .== date2num(calibration_date))[1][1]
+    T_estimation_exo = findall(data["quarters_num"] .== date2num(estimation_date))[1][1]
+    T_calibration_exo = findall(data["quarters_num"] .== date2num(calibration_date))[1][1]
     T_calibration_exo_max = length(data["quarters_num"])
     intermediate_consumption = figaro["intermediate_consumption"][:, :, T_calibration]
     G = size(intermediate_consumption)[1]
@@ -219,8 +219,15 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     taxes_products_government = figaro["taxes_products_government"][T_calibration]
     bank_equity_quarterly = calibration_data["bank_equity_quarterly"][T_calibration_quarterly]
     taxes_products = figaro["taxes_products"][:, T_calibration]
+    # MATLAB zeros out taxes_products (set_parameters_and_initial_conditions.m:105-106)
+    # This is necessary for the GDP expenditure identity (Y = C + G + I + X - M) to hold.
+    # In BeforeIT's update_data!(), GDP includes sum(firms.tau_Y_i .* firms.Y_i .* firms.P_i),
+    # which would be non-zero with actual taxes_products, breaking the identity since
+    # household consumption C = tot_Y_h * psi doesn't adjust accordingly.
+    taxes_products = zeros(G)
 
-    # Load government deficit - prefer quarterly if available, otherwise use annual (will convert later)
+    # Load government deficit - prefer quarterly if available (to match MATLAB exactly)
+    # MATLAB uses: government_deficit_quarterly / timescale
     has_quarterly_govt_deficit = haskey(calibration_data, "government_deficit_quarterly") &&
         length(calibration_data["government_deficit_quarterly"]) >= T_calibration_quarterly &&
         !ismissing(calibration_data["government_deficit_quarterly"][T_calibration_quarterly])
@@ -228,8 +235,10 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     government_deficit_quarterly = if has_quarterly_govt_deficit
         calibration_data["government_deficit_quarterly"][T_calibration_quarterly]
     else
-        calibration_data["government_deficit"][T_calibration]  # Will convert later
+        @warn "Using annual 'government_deficit' - will NOT apply timescale conversion"
+        nothing  # Will use annual directly
     end
+    government_deficit_annual = calibration_data["government_deficit"][T_calibration]
 
     firms = calibration_data["firms"][:, T_calibration]
     employees = calibration_data["employees"][:, T_calibration]
@@ -241,10 +250,15 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     # Ensure intermediate_consumption is non-negative (robustness)
     intermediate_consumption = max.(0, intermediate_consumption)
 
+    # Load capital_consumption early (needed for output calculation)
+    capital_consumption = calibration_data["capital_consumption"][:, T_calibration]
+
     # Calculate variables from accounting identity
+    # NOTE: capital_consumption IS included in output to match MATLAB behavior (Line 118)
+    # This is necessary for the supply-demand balance and imports residual calculation.
     output =
         sum(intermediate_consumption, dims = 1)' .+ taxes_products .+ taxes_production .+ compensation_employees .+
-        operating_surplus
+        operating_surplus .+ capital_consumption
     output = output[:, 1]
 
     ## If fixed_assets and dwellings are given on industry-level
@@ -265,13 +279,10 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
             sum((fixed_assets_eu7 - dwellings_eu7) ./ nominal_nace64_output_eu7 .* output, dims = 1)
     end
 
-    # ## OR [2025-09-15 Mo]: capital_consumption is already computed in
-    # ## `import_calibration_data` (for all years), so not necessary to do here
-    # ## again. Instead, we just extract the correct year-vector from the
-    # ## capital-consumption-matrix.
-    capital_consumption = calibration_data["capital_consumption"][:, T_calibration]
     unemployment_rate_quarterly = data["unemployment_rate_quarterly"][T_calibration_exo]
-    operating_surplus = operating_surplus - capital_consumption
+    # NOTE: Do NOT subtract capital_consumption from operating_surplus here.
+    # Neither MATLAB codebase (ABM nor DDGABM) does this adjustment.
+    # operating_surplus from FIGARO is used as-is.
     taxes_products_export = 0 # TODO: unelegant hard coded zero
     # Employers' social contributions (D12) = Compensation (D1) - Wages (D11)
     # Using sectoral wages_by_sector to get vector by sector
@@ -281,6 +292,10 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     taxes_products_capitalformation_dwellings =
         gross_capitalformation_dwellings *
         (1 - 1 / (1 + taxes_products_fixed_capitalformation / sum(fixed_capitalformation)))
+    # NOTE: capital_consumption IS included in both timescale and output calculations
+    # to match MATLAB behavior (Line 112). Although FIGARO B2A3G is Gross (includes CFC),
+    # the MATLAB codebase explicitly includes capital_consumption for internal consistency
+    # in the supply-demand balance and imports residual calculation.
     timescale =
         data["nominal_gdp_quarterly"][T_calibration_exo] / (
             sum(
@@ -296,9 +311,6 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     end
     if !has_quarterly_govt_interest
         interest_government_debt_quarterly = timescale * interest_government_debt_quarterly
-    end
-    if !has_quarterly_govt_deficit
-        government_deficit_quarterly = timescale * government_deficit_quarterly
     end
 
     capitalformation_dwellings =
@@ -327,10 +339,17 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     household_social_contributions = social_contributions - sum(employers_social_contributions)
     wages = compensation_employees * (1 - sum(employers_social_contributions) / sum(compensation_employees))
     household_income_tax = income_tax - corporate_tax
-    # Government budget identity for other_net_transfers
-    # Note: interest and deficit are quarterly values, divide by timescale for annual-equivalent
-    # to match units with other annual variables (taxes, benefits, etc.)
-    other_net_transfers = Bit.pos(
+    # Government budget identity for other_net_transfers (matching MATLAB exactly)
+    # MATLAB: other_net_transfers = ... - interest_government_debt_quarterly/timescale - government_deficit_quarterly/timescale
+    # All quarterly data is divided by timescale to convert to annual units
+    govt_deficit_term = if has_quarterly_govt_deficit
+        government_deficit_quarterly / timescale  # quarterly → annual (like MATLAB)
+    else
+        government_deficit_annual  # already annual (fallback)
+    end
+    # Allow negative values (matching MATLAB exactly - no Bit.pos() wrapper)
+    # Countries with government deficits can have negative other_net_transfers
+    other_net_transfers =
         sum(taxes_products_household) +
         sum(taxes_products_capitalformation_dwellings) +
         sum(taxes_products_export) +
@@ -340,10 +359,11 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
         household_social_contributions +
         household_income_tax +
         corporate_tax +
-        capital_taxes - social_benefits - sum(government_consumption) -
+        capital_taxes -
+        social_benefits -
+        sum(government_consumption) -
         interest_government_debt_quarterly / timescale -
-        government_deficit_quarterly / timescale,
-    )
+        govt_deficit_term
     disposable_income =
         sum(wages) + mixed_income + property_income + social_benefits + other_net_transfers -
         household_social_contributions - household_income_tax - capital_taxes
