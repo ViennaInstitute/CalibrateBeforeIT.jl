@@ -9,3 +9,9 @@
 .DS_Store
 *.jld2
 /Manifest*.toml
+/Agent_prompt.md
+/DONE_ITEMS.md
+/Initializer_prompt.org
+/Oliver_Checklist.org
+/Progress.md
+/TODO.md
