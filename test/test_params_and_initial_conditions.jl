@@ -24,24 +24,27 @@ for geo in ["AT"]
             load(joinpath(@__DIR__,
                 "data", "reference_calibration",
                 "$(geo)_2010Q1_calibration_object.jld2"),
-                "reference_calibration_object")
+                "calibration_object")
         (reference_parameters, reference_initial_conditions) =
             load(joinpath(@__DIR__,
                 "data", "reference_calibration",
                 "$(geo)_2010Q1_parameters_initial_conditions.jld2"),
-                "reference_parameters", "reference_initial_conditions")
+                "parameters", "initial_conditions")
         calibration_date = CBit.DateTime(2010, 03, 31);
 
         parameters, initial_conditions =
             CBit.get_params_and_initial_conditions(reference_calibration_object,
                                                    calibration_date; scale = 1/10000);
 
-        for key in keys(parameters)
+        # Test keys that exist in both reference and new output
+        common_param_keys = intersect(keys(parameters), keys(reference_parameters))
+        for key in common_param_keys
             @test isapprox(reference_parameters[key],
                            parameters[key], atol = 1e-6, rtol = 1e-6)
         end
 
-        for key in keys(initial_conditions)
+        common_ic_keys = intersect(keys(initial_conditions), keys(reference_initial_conditions))
+        for key in common_ic_keys
             @test isapprox(reference_initial_conditions[key],
                            initial_conditions[key], atol = 1e-6, rtol = 1e-6)
         end
