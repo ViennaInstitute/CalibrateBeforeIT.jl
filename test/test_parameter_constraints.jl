@@ -32,22 +32,7 @@ end
         data = load(reference_file)
         params = data["parameters"]
 
-        @testset "Behavioral Parameters - Consumption Propensities" begin
-            # psi (consumption propensity) must be in (0, 1)
-            # Economic interpretation: fraction of disposable income spent on consumption
-            @test haskey(params, "psi")
-            psi = params["psi"]
-            @testset "psi positive (got $psi)" begin
-                @test psi > 0
-            end
-            # The ESA savings rate comparison in multi-country tests validates psi against official statistics
-            @testset "psi >= 0.3 typical (got $psi)" begin
-                @test psi >= 0.3
-            end
-            @testset "psi <= 0.99 typical (got $psi)" begin
-                @test psi <= 0.99
-            end
-
+        @testset "Behavioral Parameters - Housing Investment Propensity" begin
             # psi_H (housing investment propensity) must be positive and small
             @test haskey(params, "psi_H")
             psi_H = params["psi_H"]
@@ -165,7 +150,7 @@ end
         end
 
         @testset "No NaN or Inf Values" begin
-            scalar_params = ["psi", "psi_H", "theta_DIV", "mu", "tau_INC", "tau_FIRM",
+            scalar_params = ["psi_H", "theta_DIV", "mu", "tau_INC", "tau_FIRM",
                             "tau_VAT", "tau_SIF", "tau_SIW", "tau_EXPORT", "tau_CF", "tau_G",
                             "theta", "zeta", "zeta_LTV", "zeta_b", "r_G", "theta_UB"]
 
@@ -182,86 +167,3 @@ end
     end
 end
 
-@testset "Parameter Constraints - Multiple Countries" begin
-    # Test constraints across available calibration files
-    calibration_dir = joinpath(dirname(@__DIR__), "data", "020_calibration_output")
-
-    if isdir(calibration_dir)
-        countries = filter(x -> isdir(joinpath(calibration_dir, x)), readdir(calibration_dir))
-
-        psi_values = Float64[]
-        psi_H_values = Float64[]
-        savings_rate_deviations = Tuple{String, Float64, Float64}[]  # (file, our_rate, esa_rate)
-
-        for country in countries[1:min(5, length(countries))]  # Test first 5 countries
-            country_dir = joinpath(calibration_dir, country)
-            param_files = filter(f -> endswith(f, "_parameters_initial_conditions.jld2"), readdir(country_dir))
-
-            for file in param_files[1:min(3, length(param_files))]  # Test first 3 quarters per country
-                file_path = joinpath(country_dir, file)
-                # Construct calibration object file path
-                calib_file = replace(file, "_parameters_initial_conditions.jld2" => "_calibration_object.jld2")
-                calib_path = joinpath(country_dir, calib_file)
-
-                try
-                    data = load(file_path)
-                    params = data["parameters"]
-
-                    psi = params["psi"]
-                    psi_H = params["psi_H"]
-
-                    push!(psi_values, psi)
-                    push!(psi_H_values, psi_H)
-
-                    # ESA savings rate comparison
-                    # Our savings rate = 1 - psi (housing investment comes FROM savings in ESA)
-                    # ESA savings rate = B8G / B6G
-                    if isfile(calib_path)
-                        calib_data = load(calib_path)["calibration_data"]
-                        if haskey(calib_data, "gross_saving_esa") && haskey(calib_data, "gross_disposable_income_esa")
-                            b8g = calib_data["gross_saving_esa"]
-                            b6g = calib_data["gross_disposable_income_esa"]
-                            # Use last year's values (most recent)
-                            if !isempty(b8g) && !isempty(b6g) && !ismissing(b8g[end]) && !ismissing(b6g[end]) && b6g[end] > 0
-                                esa_savings_rate = b8g[end] / b6g[end]
-                                our_savings_rate = 1 - psi
-                                deviation = abs(our_savings_rate - esa_savings_rate)
-                                if deviation > 0.01  # More than 1 percentage point difference
-                                    push!(savings_rate_deviations, ("$country/$file", our_savings_rate, esa_savings_rate))
-                                end
-                            end
-                        end
-                    end
-                catch e
-                    @warn "Failed to load $file_path: $e"
-                end
-            end
-        end
-
-        @testset "Cross-country psi statistics" begin
-            if length(psi_values) > 0
-                @testset "All psi > 0" begin
-                    @test minimum(psi_values) > 0
-                end
-                @testset "Mean psi > 0.5 (got $(mean(psi_values)))" begin
-                    @test mean(psi_values) > 0.5
-                end
-                @testset "Mean psi < 0.95 (got $(mean(psi_values)))" begin
-                    @test mean(psi_values) < 0.95
-                end
-            end
-        end
-
-        @testset "ESA savings rate comparison" begin
-            # Our implied savings rate (1 - psi) should be within 1pp of ESA rate (B8G/B6G)
-            @test length(savings_rate_deviations) == 0
-            if length(savings_rate_deviations) > 0
-                for (file, our_rate, esa_rate) in savings_rate_deviations[1:min(5, length(savings_rate_deviations))]
-                    @warn "Savings rate deviation: $file: ours=$(round(our_rate, digits=3)), ESA=$(round(esa_rate, digits=3))"
-                end
-            end
-        end
-    else
-        @info "Calibration output directory not found, skipping multi-country tests"
-    end
-end
