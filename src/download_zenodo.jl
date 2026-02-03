@@ -1,4 +1,5 @@
 using Downloads
+using ZipFile
 
 # Zenodo download and extraction utilities
 """
@@ -46,22 +47,33 @@ function download_and_extract_zenodo_data(zip_file::String = ZENODO_ZIP_FILE,
         println("Zip file already exists: $zip_path")
     end
 
-    # Extract the zip file using system unzip command
+    # Extract the zip file using ZipFile
     println("Extracting $zip_file to $extract_to...")
+
+    # Open zip file
+    r = ZipFile.Reader(zip_path)
     try
-        # Change to extraction directory for relative paths
-        original_dir = pwd()
-        cd(extract_to)
+        for f in r.files
+            # Skip valid directories (indicated by trailing /) to avoid errors
+            if endswith(f.name, "/")
+                continue
+            end
 
-        # Use system unzip command
-        run(`unzip -o $zip_file`)
+            full_path = joinpath(extract_to, f.name)
 
-        cd(original_dir)
-        println("Extraction completed successfully!")
-    catch e
-        cd(original_dir)  # Ensure we return to original directory even on error
-        error("Failed to extract zip file: $e")
+            # Ensure directory exists
+            mkpath(dirname(full_path))
+
+            # Write file content
+            open(full_path, "w") do io
+                write(io, read(f))
+            end
+        end
+    finally
+        close(r)
     end
+
+    println("Extraction completed successfully!")
 
     return extract_to
 end
