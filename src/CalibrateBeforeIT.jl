@@ -16,14 +16,12 @@ export download_and_extract_zenodo_data, get_eurostat_table_ids,
     get_valid_calibration_quarters
 
 # Zenodo configuration - TODO: Update these values when the record is published
-const ZENODO_ZIP_FILE = "data_eurostat_2025_10_09.zip"
+const ZENODO_ZIP_FILENAME = "data_eurostat_2026_02_11"
 
 # NOTE: The current record ID (17304433) does not exist.
 # When the Zenodo record is created/published, update this URL.
 # For published records, use: https://zenodo.org/api/records/RECORD_ID/files/FILENAME/content
-ZENODO_URL = "https://zenodo.org/api/records/17304433/files/$(ZENODO_ZIP_FILE)/content"
-global zenodo_path = "data/010_zenodo_tables"
-
+const ZENODO_URL = "https://zenodo.org/api/records/18610477/files/$(ZENODO_ZIP_FILENAME).zip/content"
 
 # Eurostat table IDs required for calibration
 const ALL_EUROSTAT_TABLE_IDS = [
