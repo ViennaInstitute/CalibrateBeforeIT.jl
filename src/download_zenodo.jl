@@ -46,19 +46,29 @@ function download_and_extract_zenodo_data(
         println("Zip file already exists: $zip_file")
     end
 
-    # Extract the zip file using system unzip command
-    println("Extracting $zip_file...")
+    # Extract the zip file using ZipArchives.jl (cross-platform)
+    println("Extracting $zip_file to $extract_to...")
     try
-        # Change to extraction directory for relative paths
-        original_dir = pwd()
+        data = read(zip_path)
+        archive = ZipReader(data)
 
-        # Use system unzip command
-        run(`unzip -o $zip_file`)
+        for name in zip_names(archive)
+            out_path = joinpath(extract_to, name)
 
-        cd(original_dir)
+            # Security: prevent path traversal attacks
+            if !startswith(normpath(out_path), normpath(extract_to))
+                error("Path traversal detected in zip entry: $name")
+            end
+
+            if zip_isdir(archive, name)
+                mkpath(out_path)
+            else
+                mkpath(dirname(out_path))
+                write(out_path, zip_readentry(archive, name))
+            end
+        end
         println("Extraction completed successfully!")
     catch e
-        cd(original_dir)  # Ensure we return to original directory even on error
         error("Failed to extract zip file: $e")
     end
 end

@@ -21,6 +21,7 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 Tables = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+ZipArchives = "49080126-0e18-4c2a-b176-c102e4b3760c"
 
 [compat]
 BeforeIT = "0"
@@ -38,3 +39,4 @@ Revise = "3.8.0"
 StatsBase = "0.34.5"
 Tables = "1.12.0"
 Test = ">= 1.10.0"
+ZipArchives = "2.0"
