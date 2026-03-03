@@ -25,293 +25,180 @@ end
 @testset "Initial Conditions - Financial Stocks" begin
 
     reference_file = joinpath(TEST_DATA_DIR, "AT_2010Q1_parameters_initial_conditions.jld2")
+    data = load(reference_file)
+    init_conds = data["initial_conditions"]
 
-    if isfile(reference_file)
-        data = load(reference_file)
-        init_conds = data["initial_conditions"]
+    @testset "Firm Financial Stocks" begin
+        D_I = init_conds["D_I"]
+        @test !isnan(D_I)
+        @test !isinf(D_I)
+        @test D_I > 0
 
-        @testset "Firm Financial Stocks" begin
-            # D_I: Firm deposits/cash
-            @test haskey(init_conds, "D_I")
-            if haskey(init_conds, "D_I")
-                D_I = init_conds["D_I"]
-                @test !isnan(D_I)
-                @test !isinf(D_I)
-                @test D_I > 0
-            end
+        L_I = init_conds["L_I"]
+        @test !isnan(L_I)
+        @test !isinf(L_I)
+        @test L_I > 0
+    end
 
-            # L_I: Firm loans/debt
-            @test haskey(init_conds, "L_I")
-            if haskey(init_conds, "L_I")
-                L_I = init_conds["L_I"]
-                @test !isnan(L_I)
-                @test !isinf(L_I)
-                @test L_I > 0
-            end
-        end
+    @testset "Household Financial Stocks" begin
+        D_H = init_conds["D_H"]
+        @test !isnan(D_H)
+        @test !isinf(D_H)
+        @test D_H > 0
 
-        @testset "Household Financial Stocks" begin
-            # D_H: Household deposits
-            @test haskey(init_conds, "D_H")
-            if haskey(init_conds, "D_H")
-                D_H = init_conds["D_H"]
-                @test !isnan(D_H)
-                @test !isinf(D_H)
-                @test D_H > 0
-            end
+        K_H = init_conds["K_H"]
+        @test !isnan(K_H)
+        @test !isinf(K_H)
+        @test K_H > 0
+    end
 
-            # K_H: Household housing capital
-            @test haskey(init_conds, "K_H")
-            if haskey(init_conds, "K_H")
-                K_H = init_conds["K_H"]
-                @test !isnan(K_H)
-                @test !isinf(K_H)
-                @test K_H > 0
-            end
-        end
+    @testset "Government and Bank Stocks" begin
+        L_G = init_conds["L_G"]
+        @test !isnan(L_G)
+        @test !isinf(L_G)
+        @test L_G > 0
 
-        @testset "Government and Bank Stocks" begin
-            # L_G: Government debt
-            @test haskey(init_conds, "L_G")
-            if haskey(init_conds, "L_G")
-                L_G = init_conds["L_G"]
-                @test !isnan(L_G)
-                @test !isinf(L_G)
-                @test L_G > 0
-            end
+        E_k = init_conds["E_k"]
+        @test !isnan(E_k)
+        @test !isinf(E_k)
+        @test E_k > 0
 
-            # E_k: Bank equity
-            @test haskey(init_conds, "E_k")
-            if haskey(init_conds, "E_k")
-                E_k = init_conds["E_k"]
-                @test !isnan(E_k)
-                @test !isinf(E_k)
-                @test E_k > 0
-            end
+        # E_CB: Central bank equity (CAN be negative - it's the residual sector)
+        E_CB = init_conds["E_CB"]
+        @test !isnan(E_CB)
+        @test !isinf(E_CB)
 
-            # E_CB: Central bank equity (CAN be negative - it's the residual sector)
-            @test haskey(init_conds, "E_CB")
-            if haskey(init_conds, "E_CB")
-                E_CB = init_conds["E_CB"]
-                @test !isnan(E_CB)
-                @test !isinf(E_CB)
-                # Note: E_CB can be negative (residual sector balances the books)
-            end
+        # D_RoW: Rest of world (typically 0)
+        D_RoW = init_conds["D_RoW"]
+        @test !isnan(D_RoW)
+        @test !isinf(D_RoW)
+    end
 
-            # D_RoW: Rest of world (typically 0)
-            @test haskey(init_conds, "D_RoW")
-            if haskey(init_conds, "D_RoW")
-                D_RoW = init_conds["D_RoW"]
-                @test !isnan(D_RoW)
-                @test !isinf(D_RoW)
-            end
-        end
+    @testset "Balance Sheet Identity" begin
+        # SFC identity: E_CB = L_G + L_I - D_I - D_H - E_k
+        E_CB = init_conds["E_CB"]
+        L_G = init_conds["L_G"]
+        L_I = init_conds["L_I"]
+        D_I = init_conds["D_I"]
+        D_H = init_conds["D_H"]
+        E_k = init_conds["E_k"]
 
-        @testset "Balance Sheet Identity" begin
-            # SFC identity: E_CB = L_G + L_I - D_I - D_H - E_k
-            # This ensures the balance sheets are consistent
-            if all(haskey.(Ref(init_conds), ["E_CB", "L_G", "L_I", "D_I", "D_H", "E_k"]))
-                E_CB = init_conds["E_CB"]
-                L_G = init_conds["L_G"]
-                L_I = init_conds["L_I"]
-                D_I = init_conds["D_I"]
-                D_H = init_conds["D_H"]
-                E_k = init_conds["E_k"]
-
-                expected_E_CB = L_G + L_I - D_I - D_H - E_k
-                @test isapprox(E_CB, expected_E_CB, rtol=0.01)
-            end
-        end
-    else
-        @info "Reference file not found, skipping financial stock tests"
+        expected_E_CB = L_G + L_I - D_I - D_H - E_k
+        @test isapprox(E_CB, expected_E_CB, rtol=0.01)
     end
 end
 
 @testset "Initial Conditions - Social Benefits" begin
 
     reference_file = joinpath(TEST_DATA_DIR, "AT_2010Q1_parameters_initial_conditions.jld2")
+    data = load(reference_file)
+    init_conds = data["initial_conditions"]
 
-    if isfile(reference_file)
-        data = load(reference_file)
-        init_conds = data["initial_conditions"]
+    @testset "Unemployment Benefit (w_UB)" begin
+        w_UB = init_conds["w_UB"]
+        @test !isnan(w_UB)
+        @test !isinf(w_UB)
+        @test w_UB > 0
+    end
 
-        @testset "Unemployment Benefit (w_UB)" begin
-            @test haskey(init_conds, "w_UB")
-            if haskey(init_conds, "w_UB")
-                w_UB = init_conds["w_UB"]
-                @test !isnan(w_UB)
-                @test !isinf(w_UB)
-                @test w_UB > 0
-            end
-        end
+    @testset "Inactive Benefits (sb_inact)" begin
+        sb_inact = init_conds["sb_inact"]
+        @test !isnan(sb_inact)
+        @test !isinf(sb_inact)
+        @test sb_inact > 0
+    end
 
-        @testset "Inactive Benefits (sb_inact)" begin
-            @test haskey(init_conds, "sb_inact")
-            if haskey(init_conds, "sb_inact")
-                sb_inact = init_conds["sb_inact"]
-                @test !isnan(sb_inact)
-                @test !isinf(sb_inact)
-                @test sb_inact > 0
-            end
-        end
-
-        @testset "Other Benefits (sb_other)" begin
-            @test haskey(init_conds, "sb_other")
-            if haskey(init_conds, "sb_other")
-                sb_other = init_conds["sb_other"]
-                @test !isnan(sb_other)
-                @test !isinf(sb_other)
-                # sb_other can be zero but typically positive
-                @test sb_other >= 0
-            end
-        end
-    else
-        @info "Reference file not found, skipping social benefits tests"
+    @testset "Other Benefits (sb_other)" begin
+        sb_other = init_conds["sb_other"]
+        @test !isnan(sb_other)
+        @test !isinf(sb_other)
+        # sb_other can be zero but typically positive
+        @test sb_other >= 0
     end
 end
 
 @testset "Initial Conditions - Time Series" begin
 
     reference_file = joinpath(TEST_DATA_DIR, "AT_2010Q1_parameters_initial_conditions.jld2")
+    data = load(reference_file)
+    init_conds = data["initial_conditions"]
+    params = data["parameters"]
 
-    if isfile(reference_file)
-        data = load(reference_file)
-        init_conds = data["initial_conditions"]
-        params = data["parameters"]
+    @testset "GDP History (Y)" begin
+        Y = init_conds["Y"]
 
-        @testset "GDP History (Y)" begin
-            @test haskey(init_conds, "Y")
-            if haskey(init_conds, "Y")
-                Y = init_conds["Y"]
+        @test length(Y) == params["T_prime"]
+        @test !any(isnan, Y)
+        @test !any(isinf, Y)
+        @test all(Y .> 0)
+    end
 
-                # Length should match T_prime
-                if haskey(params, "T_prime")
-                    @test length(Y) == params["T_prime"]
-                end
+    @testset "Inflation History (pi)" begin
+        pi = init_conds["pi"]
 
-                # No NaN (historical data should be complete)
-                @test !any(isnan, Y)
-                @test !any(isinf, Y)
+        @test length(pi) == params["T_prime"]
+        @test !any(isnan, pi)
+        @test !any(isinf, pi)
+        @test all(pi .> -0.2)
+        @test all(pi .< 0.5)
+    end
 
-                # GDP must be positive
-                @test all(Y .> 0)
+    @testset "Forward-Looking Series (C_G, C_E, Y_I)" begin
+        forward_series = [
+            ("C_G", "Government consumption forecast"),
+            ("C_E", "Export forecast"),
+            ("Y_I", "Import forecast"),
+        ]
+
+        for (var_name, description) in forward_series
+            series = vec(init_conds[var_name])
+
+            @test !any(isinf, series)
+
+            # NaN only allowed at the end (beyond data availability)
+            non_nan = .!isnan.(series)
+            if any(non_nan)
+                last_valid = findlast(non_nan)
+                @test all(.!isnan.(series[1:last_valid]))
+                @test all(series[non_nan] .> 0)
             end
         end
+    end
 
-        @testset "Inflation History (pi)" begin
-            @test haskey(init_conds, "pi")
-            if haskey(init_conds, "pi")
-                pi = init_conds["pi"]
+    @testset "EA Series" begin
+        Y_EA = init_conds["Y_EA"]
+        @test !isnan(Y_EA)
+        @test !isinf(Y_EA)
+        @test Y_EA > 0
 
-                # Length should match T_prime
-                if haskey(params, "T_prime")
-                    @test length(pi) == params["T_prime"]
-                end
+        pi_EA = init_conds["pi_EA"]
+        @test !isnan(pi_EA)
+        @test !isinf(pi_EA)
+        @test pi_EA > -0.1
+        @test pi_EA < 0.2
 
-                # No NaN (historical data should be complete)
-                @test !any(isnan, pi)
-                @test !any(isinf, pi)
+        r_bar = init_conds["r_bar"]
+        @test !isnan(r_bar)
+        @test !isinf(r_bar)
+        @test r_bar > -0.02
+        @test r_bar < 0.1
+    end
 
-                # Inflation can be negative (deflation) but bounded
-                @test all(pi .> -0.2)
-                @test all(pi .< 0.5)
-            end
-        end
+    @testset "Employment by Sector (N_s)" begin
+        N_s = init_conds["N_s"]
 
-        @testset "Forward-Looking Series (C_G, C_E, Y_I)" begin
-            forward_series = [
-                ("C_G", "Government consumption forecast"),
-                ("C_E", "Export forecast"),
-                ("Y_I", "Import forecast"),
-            ]
+        @test length(N_s) == 62
+        @test !any(isnan, N_s)
+        @test !any(isinf, N_s)
+        @test all(N_s .>= 0)
+        @test sum(N_s) > 100
+    end
 
-            for (var_name, description) in forward_series
-                @test haskey(init_conds, var_name)
-                if haskey(init_conds, var_name)
-                    series = vec(init_conds[var_name])
-
-                    # No Inf
-                    @test !any(isinf, series)
-
-                    # NaN only allowed at the end (beyond data availability)
-                    non_nan = .!isnan.(series)
-                    if any(non_nan)
-                        # Find last non-NaN index
-                        last_valid = findlast(non_nan)
-                        # All elements before last_valid should be non-NaN
-                        @test all(.!isnan.(series[1:last_valid]))
-
-                        # Non-NaN values should be positive
-                        @test all(series[non_nan] .> 0)
-                    end
-                end
-            end
-        end
-
-        @testset "EA Series" begin
-            # Y_EA: Eurozone GDP (scalar)
-            @test haskey(init_conds, "Y_EA")
-            if haskey(init_conds, "Y_EA")
-                Y_EA = init_conds["Y_EA"]
-                @test !isnan(Y_EA)
-                @test !isinf(Y_EA)
-                @test Y_EA > 0
-            end
-
-            # pi_EA: Eurozone inflation (scalar)
-            @test haskey(init_conds, "pi_EA")
-            if haskey(init_conds, "pi_EA")
-                pi_EA = init_conds["pi_EA"]
-                @test !isnan(pi_EA)
-                @test !isinf(pi_EA)
-                @test pi_EA > -0.1
-                @test pi_EA < 0.2
-            end
-
-            # r_bar: Risk-free rate
-            @test haskey(init_conds, "r_bar")
-            if haskey(init_conds, "r_bar")
-                r_bar = init_conds["r_bar"]
-                @test !isnan(r_bar)
-                @test !isinf(r_bar)
-                # r_bar can be negative (negative interest rates)
-                @test r_bar > -0.02
-                @test r_bar < 0.1
-            end
-        end
-
-        @testset "Employment by Sector (N_s)" begin
-            @test haskey(init_conds, "N_s")
-            if haskey(init_conds, "N_s")
-                N_s = init_conds["N_s"]
-
-                # Should be 62 sectors
-                @test length(N_s) == 62
-
-                # No NaN or Inf
-                @test !any(isnan, N_s)
-                @test !any(isinf, N_s)
-
-                # Employment must be non-negative (some sectors can have 0)
-                @test all(N_s .>= 0)
-
-                # Total employment should be substantial
-                @test sum(N_s) > 100
-            end
-        end
-
-        @testset "Capital Utilization (omega)" begin
-            @test haskey(init_conds, "omega")
-            if haskey(init_conds, "omega")
-                omega = init_conds["omega"]
-                @test !isnan(omega)
-                @test !isinf(omega)
-                # omega typically fixed at 0.85
-                @test omega ≈ 0.85 atol=0.01
-            end
-        end
-    else
-        @info "Reference file not found, skipping time series tests"
+    @testset "Capital Utilization (omega)" begin
+        omega = init_conds["omega"]
+        @test !isnan(omega)
+        @test !isinf(omega)
+        @test omega ≈ 0.85 atol=0.01
     end
 end
 

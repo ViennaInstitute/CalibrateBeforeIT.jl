@@ -129,7 +129,13 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S14_S15' AND na_item='D4' AND direct='RECV' ORDER BY time"
     calibration_data["property_income"]=execute(conn,sqlquery);
 
-    sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S14_S15' AND na_item='B2A3N' AND direct='RECV' ORDER BY time"
+    # D4 PAID: Property income paid by households (for net property income calculation)
+    sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S14_S15' AND na_item='D4' AND direct='PAID' ORDER BY time"
+    calibration_data["property_income_paid"]=execute(conn,sqlquery);
+
+    # Use B2A3G (Gross Operating Surplus/Mixed Income) instead of B2A3N (Net)
+    # Gross includes capital consumption, which is needed for ESA-consistent disposable income
+    sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S14_S15' AND na_item='B2A3G' AND direct='RECV' ORDER BY time"
     calibration_data["mixed_income"]=execute(conn,sqlquery);
 
     sqlquery="SELECT sum(value) FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector IN ('S11','S12') AND na_item='D41' AND direct='PAID' GROUP BY time ORDER BY time"
@@ -179,11 +185,30 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT value FROM '$(pqfile("gov_10a_exp"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S13' AND cofog99='GF1002' AND na_item='TE' ORDER BY time"
     calibration_data["pension_benefits"]=execute(conn,sqlquery);
 
-    sqlquery="SELECT value FROM '$(pqfile("gov_10a_main"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='D62PAY' ORDER BY time"
+    # D62 RECV from household sector - captures ALL social benefits including private pensions
+    # (gov_10a_main D62PAY only captures government-paid benefits, missing private pension funds)
+    sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S14_S15' AND na_item='D62' AND direct='RECV' ORDER BY time"
     calibration_data["social_benefits"]=execute(conn,sqlquery);
 
-    sqlquery="SELECT value FROM '$(pqfile("gov_10a_main"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='D61REC' ORDER BY time"
+    # D61 PAID from household sector - captures ALL social contributions including private pensions
+    # (gov_10a_main D61REC only captures government-received contributions, missing private pension funds)
+    sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S14_S15' AND na_item='D61' AND direct='PAID' ORDER BY time"
     calibration_data["social_contributions"]=execute(conn,sqlquery);
+
+    # D7: Other current transfers (replaces government budget residual for ESA consistency)
+    sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S14_S15' AND na_item='D7' AND direct='RECV' ORDER BY time"
+    calibration_data["other_current_transfers_recv"]=execute(conn,sqlquery);
+
+    sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S14_S15' AND na_item='D7' AND direct='PAID' ORDER BY time"
+    calibration_data["other_current_transfers_paid"]=execute(conn,sqlquery);
+
+    # B6G: Gross Disposable Income (ESA standard) for verification
+    sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S14_S15' AND na_item='B6G' AND direct='RECV' ORDER BY time"
+    calibration_data["gross_disposable_income_esa"]=execute(conn,sqlquery);
+
+    # B8G: Gross Saving (ESA standard) for savings rate verification
+    sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S14_S15' AND na_item='B8G' AND direct='RECV' ORDER BY time"
+    calibration_data["gross_saving_esa"]=execute(conn,sqlquery);
 
     sqlquery="SELECT value FROM '$(pqfile("gov_10a_main"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='D5REC' ORDER BY time"
     calibration_data["income_tax"]=execute(conn,sqlquery);

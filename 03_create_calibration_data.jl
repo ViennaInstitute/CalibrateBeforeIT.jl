@@ -8,6 +8,7 @@
 
 cd(@__DIR__)
 
+using JLD2: jldsave
 import CalibrateBeforeIT as CBit
 
 ## Set some parameters for the data-downloading process. `eurostat_path` is
@@ -35,7 +36,7 @@ start_year = 1996
 end_year = 2024
 
 ## For `import_figaro_data`:
-max_calibration_date = CBit.DateTime(2020, 12, 31)
+max_calibration_date = CBit.DateTime(2023, 12, 31)
 estimation_date = CBit.DateTime(1996, 12, 31)
 number_sectors = 62;
 
@@ -45,7 +46,8 @@ number_sectors = 62;
 # ## countries excluding the non-working ones:
 # HR: 2010-2012
 # MT
-all_countries = ["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "NL", "PL", "PT", "RO", "SE", "SI", "SK"]
+all_countries = ["NL"]
+# all_countries = ["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "NL", "PL", "PT", "RO", "SE", "SI", "SK"]
 
 ## This step does the same queries as step 5 with import_data(), but with geo ==
 ## "EA19". Only difference is that with EA19, unemployment rates are not used
@@ -99,22 +101,27 @@ for geo in all_countries
 
     ##------------------------------------------------------------
     @info "Step 8: Calculate the initial conditions and parameters"
-    for calibration_year in 2020:end_calibration_year
-        for calibration_quarter in 1:4
-            calibration_month = calibration_quarter * 3
-            calibration_date = CBit.DateTime(calibration_year, calibration_month,
-                calibration_month in [3, 12] ? 31 : 30);
 
+    # Get valid quarters that have all required data
+    valid_quarters = CBit.get_valid_calibration_quarters(calibration_object)
+    @info "  Found $(length(valid_quarters)) valid quarters for $(geo)"
+
+    for (calibration_year, calibration_quarter) in valid_quarters
+        calibration_month = calibration_quarter * 3
+        calibration_date = CBit.DateTime(calibration_year, calibration_month,
+            calibration_month in [3, 12] ? 31 : 30);
+
+        try
             parameters, initial_conditions =
                 CBit.get_params_and_initial_conditions(calibration_object,
-                    calibration_date; scale = 1/10000);
-
-            # @info "Calibrated $(geo) $(calibration_year)Q$(calibration_quarter)"
+                    calibration_date; scale = 1/1000);
 
             ## Save the parameters and initial conditions
             jldsave("$(CBit.calibration_output_path)/$(geo)/$(calibration_year)Q$(calibration_quarter)_parameters_initial_conditions.jld2";
                 parameters = parameters,
                 initial_conditions = initial_conditions)
+        catch e
+            @warn "  Skipping $(geo) $(calibration_year)Q$(calibration_quarter): $e"
         end
     end
 end

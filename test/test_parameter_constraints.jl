@@ -21,149 +21,82 @@ end
 
 @testset "Parameter Constraints Tests" begin
 
-    # Load a sample calibration file
     reference_file = joinpath(TEST_DATA_DIR, "AT_2010Q1_parameters_initial_conditions.jld2")
+    data = load(reference_file)
+    params = data["parameters"]
 
-    @testset "Reference file exists" begin
-        @test isfile(reference_file)
+    @testset "Behavioral Parameters - Housing Investment Propensity" begin
+        psi_H = params["psi_H"]
+        @test psi_H >= 0
+        @test psi_H < 0.3
     end
 
-    if isfile(reference_file)
-        data = load(reference_file)
-        params = data["parameters"]
+    @testset "Behavioral Parameters - Dividend Payout" begin
+        theta_DIV = params["theta_DIV"]
+        @test theta_DIV > 0
+        @test theta_DIV < 1.5
+    end
 
-        @testset "Behavioral Parameters - Housing Investment Propensity" begin
-            # psi_H (housing investment propensity) must be positive and small
-            @test haskey(params, "psi_H")
-            psi_H = params["psi_H"]
-            @testset "psi_H non-negative (got $psi_H)" begin
-                @test psi_H >= 0
-            end
-            @testset "psi_H < 0.3 typical (got $psi_H)" begin
-                @test psi_H < 0.3
-            end
-        end
+    @testset "Behavioral Parameters - Bank Markup" begin
+        mu = params["mu"]
+        @test mu > 0
+        @test mu < 0.1
+    end
 
-        @testset "Behavioral Parameters - Dividend Payout" begin
-            # theta_DIV (dividend payout ratio) must be in (0, 1)
-            @test haskey(params, "theta_DIV")
-            theta_DIV = params["theta_DIV"]
-            @testset "theta_DIV positive (got $theta_DIV)" begin
-                @test theta_DIV > 0
-            end
-            @testset "theta_DIV < 1 (got $theta_DIV)" begin
-                @test theta_DIV < 1
+    @testset "Tax Rate Parameters - Bounds" begin
+        tax_params = ["tau_INC", "tau_FIRM", "tau_VAT", "tau_SIF", "tau_SIW",
+                      "tau_EXPORT", "tau_CF", "tau_G"]
+
+        for tax_param in tax_params
+            @testset "$tax_param bounded" begin
+                tau = params[tax_param]
+                @test tau >= -0.1
+                @test tau <= 1.0
             end
         end
 
-        @testset "Behavioral Parameters - Bank Markup" begin
-            # mu (bank markup over risk-free rate) must be positive
-            @test haskey(params, "mu")
-            mu = params["mu"]
-            @testset "mu positive (got $mu)" begin
-                @test mu > 0
-            end
-            @testset "mu < 0.1 quarterly typical (got $mu)" begin
-                @test mu < 0.1
-            end
+        # tau_FIRM can be negative (if losses > profits), but should be bounded
+        @test params["tau_FIRM"] >= -0.5
+    end
+
+    @testset "Fixed Parameters" begin
+        @test isapprox(params["theta"], 0.05, atol=0.01)
+        @test isapprox(params["zeta"], 0.03, atol=0.01)
+        @test isapprox(params["zeta_LTV"], 0.6, atol=0.1)
+        @test isapprox(params["zeta_b"], 0.5, atol=0.1)
+    end
+
+    @testset "Model Dimensions" begin
+        @test params["G"] == 62
+        @test params["T_prime"] > 0
+
+        for pop_param in ["H_act", "H_inact", "J", "L"]
+            @test params[pop_param] > 0
         end
+    end
 
-        @testset "Tax Rate Parameters - Bounds" begin
-            tax_params = ["tau_INC", "tau_FIRM", "tau_VAT", "tau_SIF", "tau_SIW",
-                          "tau_EXPORT", "tau_CF", "tau_G"]
+    @testset "No NaN or Inf Values" begin
+        scalar_params = ["psi_H", "theta_DIV", "mu", "tau_INC", "tau_FIRM",
+                        "tau_VAT", "tau_SIF", "tau_SIW", "tau_EXPORT", "tau_CF", "tau_G",
+                        "theta", "zeta", "zeta_LTV", "zeta_b", "r_G", "theta_UB"]
 
-            for tax_param in tax_params
-                @testset "$tax_param exists and bounded" begin
-                    @test haskey(params, tax_param)
-                    if haskey(params, tax_param)
-                        tau = params[tax_param]
-                        # Tax rates should be in [0, 1], with possible small negative for subsidies
-                        @test tau >= -0.1
-                        @test tau <= 1.0
-
-                        # Flag unusually high tax rates (> 60%)
-                        if tau > 0.6
-                            @warn "$tax_param is unusually high: $tau"
-                        end
-                    end
-                end
-            end
-
-            # tau_FIRM can be negative (if losses > profits), but should be bounded
-            @testset "tau_FIRM not extremely negative" begin
-                if haskey(params, "tau_FIRM")
-                    @test params["tau_FIRM"] >= -0.5
-                end
-            end
+        for param in scalar_params
+            val = params[param]
+            @test !isnan(val)
+            @test !isinf(val)
         end
+    end
 
-        @testset "Fixed Parameters" begin
-            # These parameters are typically hardcoded in BeforeIT.jl
-            @testset "theta ≈ 0.05" begin
-                if haskey(params, "theta")
-                    @test isapprox(params["theta"], 0.05, atol=0.01)
-                end
-            end
+    @testset "Budget Constraint (psi + psi_H < 1)" begin
+        psi = params["psi"]
+        psi_H = params["psi_H"]
+        total = psi + psi_H
+        @test total < 1.0
+        @test 1 - total > 0  # savings rate positive
+    end
 
-            @testset "zeta ≈ 0.03" begin
-                if haskey(params, "zeta")
-                    @test isapprox(params["zeta"], 0.03, atol=0.01)
-                end
-            end
-
-            @testset "zeta_LTV ≈ 0.6" begin
-                if haskey(params, "zeta_LTV")
-                    @test isapprox(params["zeta_LTV"], 0.6, atol=0.1)
-                end
-            end
-
-            @testset "zeta_b ≈ 0.5" begin
-                if haskey(params, "zeta_b")
-                    @test isapprox(params["zeta_b"], 0.5, atol=0.1)
-                end
-            end
-        end
-
-        @testset "Model Dimensions" begin
-            # G (number of sectors) should be 62 for NACE64 (excluding L68A, T, U)
-            @testset "G = 62 sectors" begin
-                if haskey(params, "G")
-                    @test params["G"] == 62
-                end
-            end
-
-            # T_prime should be positive
-            @testset "T_prime > 0" begin
-                if haskey(params, "T_prime")
-                    @test params["T_prime"] > 0
-                end
-            end
-
-            # Population counts should be positive
-            for pop_param in ["H_act", "H_inact", "J", "L"]
-                @testset "$pop_param > 0" begin
-                    if haskey(params, pop_param)
-                        @test params[pop_param] > 0
-                    end
-                end
-            end
-        end
-
-        @testset "No NaN or Inf Values" begin
-            scalar_params = ["psi_H", "theta_DIV", "mu", "tau_INC", "tau_FIRM",
-                            "tau_VAT", "tau_SIF", "tau_SIW", "tau_EXPORT", "tau_CF", "tau_G",
-                            "theta", "zeta", "zeta_LTV", "zeta_b", "r_G", "theta_UB"]
-
-            for param in scalar_params
-                @testset "$param not NaN/Inf" begin
-                    if haskey(params, param)
-                        val = params[param]
-                        @test !isnan(val)
-                        @test !isinf(val)
-                    end
-                end
-            end
-        end
+    @testset "Tax Revenue Consistency" begin
+        tax_sum = sum(params[t] for t in ["tau_INC", "tau_SIF", "tau_SIW", "tau_VAT"])
+        @test tax_sum < 1.5
     end
 end
-

@@ -25,4 +25,24 @@ using Test
         include("test_params_and_initial_conditions.jl")
     end
 
+    # Parameter and Initial Condition Constraint Tests
+    # These tests validate that calibrated data satisfies economic and mathematical constraints
+    # required for stable BeforeIT.jl model execution
+
+    @testset "Parameter Constraints Tests" begin
+        include("test_parameter_constraints.jl")
+    end
+
+    @testset "Sectoral Constraints Tests" begin
+        include("test_sectoral_constraints.jl")
+    end
+
+    @testset "Initial Conditions Constraints Tests" begin
+        include("test_initial_conditions_constraints.jl")
+    end
+
+    @testset "SFC Accounting Identity Tests" begin
+        include("test_sfc_identities.jl")
+    end
+
 end

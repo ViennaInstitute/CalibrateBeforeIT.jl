@@ -130,7 +130,8 @@ end
 
 
 function get_params_and_initial_conditions(calibration_object, calibration_date;
-                                           scale = 0.001)
+                                           scale = 0.001,
+                                           use_growth_rate_ar1 = false)
     calibration_data = calibration_object.calibration
     figaro = calibration_object.figaro
     data = calibration_object.data
@@ -250,15 +251,18 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     # Ensure intermediate_consumption is non-negative (robustness)
     intermediate_consumption = max.(0, intermediate_consumption)
 
-    # Load capital_consumption early (needed for output calculation)
+    # Load capital_consumption (used for delta_s depreciation rate and imports residual)
     capital_consumption = calibration_data["capital_consumption"][:, T_calibration]
 
-    # Calculate variables from accounting identity
-    # NOTE: capital_consumption IS included in output to match MATLAB behavior (Line 118)
-    # This is necessary for the supply-demand balance and imports residual calculation.
+    # Calculate variables from production account identity:
+    # Output = Intermediate Consumption + Value Added
+    # Value Added = D1 + D29-D39 + B2A3G
+    # NOTE: capital_consumption is NOT included because operating_surplus (B2A3G) is
+    # already GROSS — it includes CFC (P51C). Adding CFC again would double-count.
+    # Verified: FIGARO D1 + D29X39 + B2A3G matches GDP B1G within 0.06% for Austria.
     output =
         sum(intermediate_consumption, dims = 1)' .+ taxes_products .+ taxes_production .+ compensation_employees .+
-        operating_surplus .+ capital_consumption
+        operating_surplus
     output = output[:, 1]
 
     ## If fixed_assets and dwellings are given on industry-level
@@ -292,14 +296,15 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     taxes_products_capitalformation_dwellings =
         gross_capitalformation_dwellings *
         (1 - 1 / (1 + taxes_products_fixed_capitalformation / sum(fixed_capitalformation)))
-    # NOTE: capital_consumption IS included in both timescale and output calculations
-    # to match MATLAB behavior (Line 112). Although FIGARO B2A3G is Gross (includes CFC),
-    # the MATLAB codebase explicitly includes capital_consumption for internal consistency
-    # in the supply-demand balance and imports residual calculation.
+    # Timescale = quarterly GDP / annual GDP proxy
+    # The denominator sums the same income components as GDP:
+    # D1 + D29-D39 + B2A3G + product taxes on final demand
+    # NOTE: capital_consumption is NOT included because operating_surplus (B2A3G) is
+    # already GROSS. Including CFC would inflate the denominator by ~20%.
     timescale =
         data["nominal_gdp_quarterly"][T_calibration_exo] / (
             sum(
-                compensation_employees .+ operating_surplus .+ capital_consumption .+ taxes_production .+
+                compensation_employees .+ operating_surplus .+ taxes_production .+
                 taxes_products,
             ) .+ taxes_products_household .+ taxes_products_capitalformation_dwellings .+ taxes_products_government .+
             taxes_products_export
@@ -337,7 +342,14 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
         exports - output,
     )
     household_social_contributions = social_contributions - sum(employers_social_contributions)
-    wages = compensation_employees * (1 - sum(employers_social_contributions) / sum(compensation_employees))
+    # Use actual per-sector D11 wages when available for more accurate w_s and pi_bar_s.
+    # Fallback: apply aggregate D12/D1 ratio uniformly (assumes identical social contribution
+    # structures across sectors). Aggregate sum(wages) is the same either way.
+    wages = if has_sectoral_wages
+        wages_by_sector
+    else
+        compensation_employees * (1 - sum(employers_social_contributions) / sum(compensation_employees))
+    end
     household_income_tax = income_tax - corporate_tax
     # Government budget identity for other_net_transfers (matching MATLAB exactly)
     # MATLAB: other_net_transfers = ... - interest_government_debt_quarterly/timescale - government_deficit_quarterly/timescale
@@ -401,6 +413,14 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     replace!(kappa_s, NaN => 0.0)
     replace!(w_s, NaN => 0.0)
     replace!(beta_s, NaN => 0.0)
+
+    # Handle zero-productivity sectors (inactive sectors in small economies like Luxembourg)
+    # Set minimum positive values to avoid NaN during BeforeIT initialization.
+    # BeforeIT computes per-firm capital as K_i = Y_i / (kappa_s * omega), which produces NaN
+    # when kappa_s = 0. Similarly, alpha_s = 0 causes issues with labor allocation.
+    MIN_PRODUCTIVITY = 1e-6
+    alpha_s = max.(alpha_s, MIN_PRODUCTIVITY)
+    kappa_s = max.(kappa_s, MIN_PRODUCTIVITY)
     tau_Y_s = taxes_products ./ output
     tau_K_s = taxes_production ./ output
     # Handle NaN for sectors with zero output
@@ -432,20 +452,42 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     tau_INC =
         (household_income_tax + capital_taxes) /
         (sum(wages) + property_income + mixed_income - household_social_contributions)
+
+    # Compute tau_SIF early (needed for model_profit_s calculation)
+    tau_SIF = sum(employers_social_contributions) / sum(wages)
+
+    # Compute sectoral profit using BeforeIT's formula (pi_bar_s × Y_s)
+    # This matches how BeforeIT will compute profits in init_firms.jl
+    # The key insight is that BeforeIT uses this formula for allocating deposits,
+    # so we must use the same formula to calibrate theta_DIV and tau_FIRM correctly.
+    Y_s = timescale * output
+    pi_bar_s = 1 .- (1 .+ tau_SIF) .* w_s ./ alpha_s .- delta_s ./ kappa_s .- 1 ./ beta_s .- tau_K_s .- tau_Y_s
+    replace!(pi_bar_s, NaN => 0.0)
+    replace!(pi_bar_s, Inf => 0.0)
+    replace!(pi_bar_s, -Inf => 0.0)
+    model_profit_s = pi_bar_s .* Y_s
+
+    # Deposit allocation using BeforeIT's profit definition
+    pos_model_profit_sum = sum(Bit.pos(model_profit_s))
+    D_s_alloc = if pos_model_profit_sum > 0
+        Bit.pos(model_profit_s) ./ pos_model_profit_sum
+    else
+        zeros(length(model_profit_s))
+    end
+    # Loan allocation (K_i / sum(K_i) = fixed_assets / sum(fixed_assets))
+    L_s_alloc = fixed_assets_other_than_dwellings ./ sum(fixed_assets_other_than_dwellings)
+    # Sectoral profit after interest (matching BeforeIT's Pi_i formula)
+    profit_after_interest_s = model_profit_s .-
+        (r_bar .+ mu) .* firm_debt_quarterly .* L_s_alloc .+
+        r_bar .* firm_cash_quarterly .* D_s_alloc
+
     tau_FIRM =
         timescale * corporate_tax / (
-            sum(
-                Bit.pos(
-                    timescale * operating_surplus -
-                    firm_interest_quarterly * fixed_assets_other_than_dwellings /
-                    sum(fixed_assets_other_than_dwellings) +
-                    r_bar * firm_cash_quarterly * Bit.pos(operating_surplus) /
-                    sum(Bit.pos(operating_surplus)),
-                ),
-            ) + firm_interest_quarterly - r_bar * (firm_debt_quarterly - bank_equity_quarterly)
+            sum(Bit.pos(profit_after_interest_s)) +
+            firm_interest_quarterly - r_bar * (firm_debt_quarterly - bank_equity_quarterly)
         )
     tau_VAT = taxes_products_household / sum(household_consumption)
-    tau_SIF = sum(employers_social_contributions) / sum(wages)
+    # tau_SIF is computed earlier (line 437) for model_profit_s calculation
     tau_SIW = household_social_contributions / sum(wages)
     tau_EXPORT = sum(taxes_products_export) / sum(exports - reexports)
     tau_CF = sum(taxes_products_capitalformation_dwellings) / sum(capitalformation_dwellings)
@@ -454,15 +496,8 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     psi_H = (sum(capitalformation_dwellings) + sum(taxes_products_capitalformation_dwellings)) / disposable_income
     theta_DIV =
         timescale * (mixed_income + property_income) / (
-            sum(
-                Bit.pos(
-                    timescale * operating_surplus -
-                    firm_interest_quarterly * fixed_assets_other_than_dwellings /
-                    sum(fixed_assets_other_than_dwellings) +
-                    r_bar * firm_cash_quarterly * Bit.pos(operating_surplus) /
-                    sum(Bit.pos(operating_surplus)),
-                ),
-            ) + firm_interest_quarterly - r_bar * (firm_debt_quarterly - bank_equity_quarterly) -
+            sum(Bit.pos(profit_after_interest_s)) +
+            firm_interest_quarterly - r_bar * (firm_debt_quarterly - bank_equity_quarterly) -
             timescale * corporate_tax
         )
     r_G = interest_government_debt_quarterly / government_debt_quarterly
@@ -472,40 +507,89 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     zeta_LTV = 0.6
     zeta_b = 0.5
 
+    # Inflation is always estimated on growth rates (diff of log) - this is already correct
     alpha_pi_EA, beta_pi_EA, sigma_pi_EA, epsilon_pi_EA = Bit.estimate_for_calibration_script(
         diff(log.(ea["gdp_deflator_quarterly"][(T_estimation_exo - 1):T_calibration_exo])),
     )
-    alpha_Y_EA, beta_Y_EA, sigma_Y_EA, epsilon_Y_EA =
-        Bit.estimate_for_calibration_script(log.(ea["real_gdp_quarterly"][T_estimation_exo:T_calibration_exo]))
 
+    # Taylor rule estimation (always uses growth rates for inflation/output gap)
     a1 = (data["euribor"][T_estimation_exo:T_calibration_exo] .+ 1) .^ (1 / 4) .- 1
     a2 = exp.(diff(log.(ea["gdp_deflator_quarterly"][(T_estimation_exo - 1):T_calibration_exo]))) .- 1
     a3 = exp.(diff(log.(ea["real_gdp_quarterly"][(T_estimation_exo - 1):T_calibration_exo]))) .- 1
-
     rho, r_star, xi_pi, xi_gamma, pi_star = Bit.estimate_taylor_rule(a1, a2, a3)
 
-
-    G_est =
+    # Level series for G, E, I (needed for initial conditions)
+    G_est_levels =
         timescale * sum(government_consumption) .*
         data["real_government_consumption_quarterly"][T_estimation_exo:T_calibration_exo] ./
         data["real_government_consumption_quarterly"][T_calibration_exo]
-    G_est = log.(G_est)
 
-    E_est =
+    E_est_levels =
         timescale * sum(exports - reexports) .* data["real_exports_quarterly"][T_estimation_exo:T_calibration_exo] ./
         data["real_exports_quarterly"][T_calibration_exo]
-    E_est = log.(E_est)
 
-    I_est =
+    I_est_levels =
         timescale * sum(imports) .* data["real_imports_quarterly"][T_estimation_exo:T_calibration_exo] ./
         data["real_imports_quarterly"][T_calibration_exo]
-    I_est = log.(I_est)
 
-    alpha_G, beta_G, sigma_G, epsilon_G = Bit.estimate_for_calibration_script(G_est)
-    alpha_E, beta_E, sigma_E, epsilon_E = Bit.estimate_for_calibration_script(E_est)
-    alpha_I, beta_I, sigma_I, epsilon_I = Bit.estimate_for_calibration_script(I_est)
+    # EA GDP series
+    Y_EA_series_raw = ea["real_gdp_quarterly"][T_estimation_exo:T_calibration_exo]
 
-    C = cov([epsilon_Y_EA epsilon_E epsilon_I])
+    # Initialize growth rate initial values (will be set if use_growth_rate_ar1 is true)
+    g_G_init = 0.0
+    g_E_init = 0.0
+    g_I_init = 0.0
+
+    # EA GDP/inflation: ALWAYS use log-level AR(1) regardless of use_growth_rate_ar1
+    # This keeps Taylor rule inputs consistent with how the Taylor rule parameters
+    # (rho, xi_pi, xi_gamma) were estimated. The growth-rate mode only affects
+    # domestic exogenous variables (G, E, I), not EA variables.
+    alpha_Y_EA, beta_Y_EA, sigma_Y_EA, epsilon_Y_EA =
+        Bit.estimate_for_calibration_script(log.(Y_EA_series_raw))
+
+    if use_growth_rate_ar1
+        # GROWTH-RATE AR(1) ESTIMATION for DOMESTIC variables only
+        # Estimate AR(1) on first differences of log (growth rates)
+        # This gives stationary parameters with α typically in 0.2-0.5 range
+
+        # Government consumption growth rates
+        G_growth = diff(log.(G_est_levels))
+        alpha_G, beta_G, sigma_G, epsilon_G = Bit.estimate_for_calibration_script(G_growth)
+        g_G_init = G_growth[end]
+
+        # Exports growth rates
+        E_growth = diff(log.(E_est_levels))
+        alpha_E, beta_E, sigma_E, epsilon_E = Bit.estimate_for_calibration_script(E_growth)
+        g_E_init = E_growth[end]
+
+        # Imports growth rates
+        I_growth = diff(log.(I_est_levels))
+        alpha_I, beta_I, sigma_I, epsilon_I = Bit.estimate_for_calibration_script(I_growth)
+        g_I_init = I_growth[end]
+    else
+        # ORIGINAL LOG-LEVEL AR(1) ESTIMATION for domestic variables
+        # Estimate AR(1) on log-levels (may give near-unit-root or explosive parameters)
+        G_est = log.(G_est_levels)
+        alpha_G, beta_G, sigma_G, epsilon_G = Bit.estimate_for_calibration_script(G_est)
+
+        E_est = log.(E_est_levels)
+        alpha_E, beta_E, sigma_E, epsilon_E = Bit.estimate_for_calibration_script(E_est)
+
+        I_est = log.(I_est_levels)
+        alpha_I, beta_I, sigma_I, epsilon_I = Bit.estimate_for_calibration_script(I_est)
+    end
+
+    # Covariance matrix calculation
+    # When use_growth_rate_ar1=true, epsilon_E and epsilon_I come from diff(log()) estimation
+    # and have length N-1, while epsilon_Y_EA (always log-level) has length N.
+    # We need to align them by dropping the first element of epsilon_Y_EA.
+    if use_growth_rate_ar1
+        # Align lengths: drop first element of epsilon_Y_EA to match growth-rate epsilons
+        epsilon_Y_EA_aligned = epsilon_Y_EA[2:end]
+        C = cov([epsilon_Y_EA_aligned epsilon_E epsilon_I])
+    else
+        C = cov([epsilon_Y_EA epsilon_E epsilon_I])
+    end
 
     # define a dictionary of parameters to save in jld2 format
     params = Dict(
@@ -571,7 +655,8 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
         "alpha_I" => alpha_I,
         "beta_I" => beta_I,
         "sigma_I" => sigma_I,
-        "C" => C
+        "C" => C,
+        "use_growth_rate_ar1" => use_growth_rate_ar1
     )
 
     # Sector initial conditions
@@ -653,6 +738,15 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
         "pi_EA_series" => pi_EA_series,
         "r_bar_series" => r_bar_series
     )
+
+    # Add initial growth rates for domestic variables if using growth-rate AR(1)
+    # Note: EA variables (g_Y_EA) are NOT included here because we always use
+    # log-level AR(1) for EA to keep Taylor rule inputs consistent.
+    if use_growth_rate_ar1
+        initial_conditions["g_G"] = g_G_init
+        initial_conditions["g_E"] = g_E_init
+        initial_conditions["g_I"] = g_I_init
+    end
 
     return params, initial_conditions
 

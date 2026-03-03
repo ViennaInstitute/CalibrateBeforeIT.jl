@@ -68,6 +68,12 @@ function import_figaro_data(geo,
     sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_use IN ('P3_S14','P3_S15') AND ind_ava='D21X31' AND time IN ($(years_str)) GROUP BY time ORDER BY time";
     figaro["taxes_products_household"]=execute(conn,sqlquery);
 
+    # Household consumption TOTAL at purchaser prices (sum of all ind_ava)
+    # This equals ESA P3 and should be used for psi calculation
+    # Includes NACE sectors + D21X31 (taxes) + OP_RES + OP_NRES (negative adjustments)
+    sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_use IN ('P3_S14','P3_S15') AND time IN ($(years_str)) GROUP BY time ORDER BY time";
+    figaro["household_consumption_total"]=execute(conn,sqlquery);
+
     sqlquery="SELECT sum(value) FROM '$(pqfile("naio_10_fcp_ii"))' WHERE c_dest='$(geo)' AND ind_use IN ('P51G','P5M') AND ind_ava='D21X31' AND time IN ($(years_str)) GROUP BY time ORDER BY time";
     figaro["taxes_products_capitalformation"]=execute(conn,sqlquery);
 
