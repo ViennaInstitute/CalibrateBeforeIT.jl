@@ -165,6 +165,13 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
     firm_cash_quarterly = calibration_data["firm_cash_quarterly"][T_calibration_quarterly]
     firm_debt_quarterly = calibration_data["firm_debt_quarterly"][T_calibration_quarterly]
 
+    # Apply consolidation ratio to exclude intra-group lending from firm debt
+    if haskey(calibration_data, "firm_debt_consolidation_ratio_quarterly") &&
+        length(calibration_data["firm_debt_consolidation_ratio_quarterly"]) >= T_calibration_quarterly &&
+        !ismissing(calibration_data["firm_debt_consolidation_ratio_quarterly"][T_calibration_quarterly])
+        firm_debt_quarterly *= calibration_data["firm_debt_consolidation_ratio_quarterly"][T_calibration_quarterly]
+    end
+
     # Check if quarterly interest data available and load accordingly
     # Must verify: (1) key exists, (2) vector is long enough, (3) value at index is not missing
     has_quarterly_firm_interest = haskey(calibration_data, "firm_interest_quarterly") &&

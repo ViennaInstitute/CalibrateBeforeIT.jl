@@ -46,8 +46,8 @@ number_sectors = 62;
 # ## countries excluding the non-working ones:
 # HR: 2010-2012
 # MT
-all_countries = ["NL"]
-# all_countries = ["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "NL", "PL", "PT", "RO", "SE", "SI", "SK"]
+# all_countries = ["AT"]
+all_countries = ["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "NL", "PL", "PT", "RO", "SE", "SI", "SK"]
 
 ## This step does the same queries as step 5 with import_data(), but with geo ==
 ## "EA19". Only difference is that with EA19, unemployment rates are not used

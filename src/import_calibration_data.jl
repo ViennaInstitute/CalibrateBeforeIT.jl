@@ -88,6 +88,30 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT value FROM '$(pqfile("nasq_10_f_bs"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='MIO_EUR' AND sector='S11' AND na_item='F4' AND finpos='LIAB' ORDER BY time"
     calibration_data["firm_debt_quarterly"]=execute(conn,sqlquery);
 
+    # Consolidated F4 loans (co_nco='CO') exclude intra-sector transactions
+    # (intercompany loans within multinationals). Annual only, so we compute
+    # the CO/NCO ratio and interpolate it to quarterly frequency.
+    try
+        sqlquery="SELECT value FROM '$(pqfile("nasa_10_f_bs"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S11' AND na_item='F4' AND finpos='LIAB' AND co_nco='CO' ORDER BY time"
+        firm_debt_consolidated = execute(conn, sqlquery)
+        sqlquery="SELECT value FROM '$(pqfile("nasa_10_f_bs"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S11' AND na_item='F4' AND finpos='LIAB' AND co_nco='NCO' ORDER BY time"
+        firm_debt_nonconsolidated = execute(conn, sqlquery)
+        if length(firm_debt_consolidated) == length(firm_debt_nonconsolidated) == number_years
+            consolidation_ratio = firm_debt_consolidated ./ firm_debt_nonconsolidated
+            # Interpolate annual ratio to quarterly using year-end date numbers
+            consolidation_ratio_quarterly = linear_interp_extrap(
+                calibration_data["years_num"],
+                consolidation_ratio,
+                calibration_data["quarters_num"]
+            )
+            calibration_data["firm_debt_consolidation_ratio_quarterly"] = consolidation_ratio_quarterly
+        else
+            @warn "Consolidated F4 length mismatch for $geo (CO=$(length(firm_debt_consolidated)), NCO=$(length(firm_debt_nonconsolidated)), years=$(number_years)), skipping consolidation"
+        end
+    catch e
+        @warn "Consolidated F4 data not available for $geo: $e"
+    end
+
     # sqlquery="SELECT value FROM '$(pqfile("nasa_10_f_bs"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S14_S15' AND na_item='F2' AND finpos='ASS' AND co_nco='NCO' ORDER BY time"
     # calibration_data["household_cash"]=execute(conn,sqlquery);
 
@@ -138,12 +162,12 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S14_S15' AND na_item='B2A3G' AND direct='RECV' ORDER BY time"
     calibration_data["mixed_income"]=execute(conn,sqlquery);
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector IN ('S11','S12') AND na_item='D41' AND direct='PAID' GROUP BY time ORDER BY time"
+    sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S11' AND na_item='D41' AND direct='PAID' ORDER BY time"
     calibration_data["firm_interest"]=execute(conn,sqlquery);
 
     # Try quarterly first, fall back to annual/4 approximation if missing
     try
-        sqlquery="SELECT sum(value) FROM '$(pqfile("nasq_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='CP_MEUR' AND sector IN ('S11','S12') AND na_item='D41' AND direct='PAID' AND s_adj='NSA' GROUP BY time ORDER BY time"
+        sqlquery="SELECT value FROM '$(pqfile("nasq_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='CP_MEUR' AND sector='S11' AND na_item='D41' AND direct='PAID' AND s_adj='NSA' ORDER BY time"
         calibration_data["firm_interest_quarterly"]=execute(conn,sqlquery);
         if length(calibration_data["firm_interest_quarterly"]) == 0
             throw(ErrorException("Empty result"))
@@ -153,7 +177,7 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
         # Don't create quarterly variable - will fall back to annual in get_params_and_initial_conditions.jl
     end
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector IN ('S11','S12') AND na_item='D51' AND direct='PAID' GROUP BY time ORDER BY time"
+    sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S11' AND na_item='D51' AND direct='PAID' ORDER BY time"
     calibration_data["corporate_tax"]=execute(conn,sqlquery);
 
     sqlquery="SELECT value FROM '$(pqfile("gov_10a_main"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='D91REC' ORDER BY time"
