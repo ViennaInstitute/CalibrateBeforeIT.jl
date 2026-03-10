@@ -138,12 +138,12 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     sqlquery="SELECT value FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S14_S15' AND na_item='B2A3G' AND direct='RECV' ORDER BY time"
     calibration_data["mixed_income"]=execute(conn,sqlquery);
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector IN ('S11','S12') AND na_item='D41' AND direct='PAID' GROUP BY time ORDER BY time"
+    sqlquery="SELECT sum(value) FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S11' AND na_item='D41' AND direct='PAID' GROUP BY time ORDER BY time"
     calibration_data["firm_interest"]=execute(conn,sqlquery);
 
     # Try quarterly first, fall back to annual/4 approximation if missing
     try
-        sqlquery="SELECT sum(value) FROM '$(pqfile("nasq_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='CP_MEUR' AND sector IN ('S11','S12') AND na_item='D41' AND direct='PAID' AND s_adj='NSA' GROUP BY time ORDER BY time"
+        sqlquery="SELECT sum(value) FROM '$(pqfile("nasq_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='CP_MEUR' AND sector='S11' AND na_item='D41' AND direct='PAID' AND s_adj='NSA' GROUP BY time ORDER BY time"
         calibration_data["firm_interest_quarterly"]=execute(conn,sqlquery);
         if length(calibration_data["firm_interest_quarterly"]) == 0
             throw(ErrorException("Empty result"))
@@ -153,7 +153,7 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
         # Don't create quarterly variable - will fall back to annual in get_params_and_initial_conditions.jl
     end
 
-    sqlquery="SELECT sum(value) FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector IN ('S11','S12') AND na_item='D51' AND direct='PAID' GROUP BY time ORDER BY time"
+    sqlquery="SELECT sum(value) FROM '$(pqfile("nasa_10_nf_tr"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='CP_MEUR' AND sector='S11' AND na_item='D51' AND direct='PAID' GROUP BY time ORDER BY time"
     calibration_data["corporate_tax"]=execute(conn,sqlquery);
 
     sqlquery="SELECT value FROM '$(pqfile("gov_10a_main"))' WHERE geo='$(geo)' AND time IN ($(years_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='D91REC' ORDER BY time"
