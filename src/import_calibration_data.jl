@@ -129,8 +129,9 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
     # sqlquery="SELECT value, time FROM '$(pqfile("nasq_10_f_bs"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='MIO_EUR' AND sector='S121_S122_S123' AND na_item='F5' AND finpos='LIAB' ORDER BY time"
     # calibration_data["bank_equity_quarterly"]=fetch_(conn,sqlquery,calibration_data["quarters_num"]);
     # new:
-    sqlquery="SELECT value FROM '$(pqfile("nasq_10_f_bs"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='MIO_EUR' AND sector='S121_S122_S123' AND na_item='F5' AND finpos='LIAB' ORDER BY time"
-    calibration_data["bank_equity_quarterly"]=execute(conn,sqlquery);
+    sqlquery1="SELECT value FROM '$(pqfile("nasq_10_f_bs"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='MIO_EUR' AND sector='S121_S122_S123' AND na_item='F5' AND finpos='LIAB' ORDER BY time"
+    sqlquery2="SELECT value FROM '$(pqfile("nasq_10_f_bs"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='MIO_EUR' AND sector='S121' AND na_item='F5' AND finpos='LIAB' ORDER BY time"
+    calibration_data["bank_equity_quarterly"]=execute(conn,sqlquery1)-execute(conn,sqlquery2);
 
     sqlquery="SELECT value FROM '$(pqfile("gov_10q_ggdebt"))' WHERE geo='$(geo)' AND time IN ($(quarters_str)) AND unit='MIO_EUR' AND sector='S13' AND na_item='GD' ORDER BY time"
     calibration_data["government_debt_quarterly"]=execute(conn,sqlquery);
