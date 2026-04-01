@@ -125,3 +125,5 @@ for geo in all_countries
         end
     end
 end
+
+@info "=> Finished creating the calibration objects!"
