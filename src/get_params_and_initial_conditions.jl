@@ -181,12 +181,13 @@ function get_params_and_initial_conditions(calibration_object, calibration_date;
         length(calibration_data["interest_government_debt_quarterly"]) >= T_calibration_quarterly &&
         !ismissing(calibration_data["interest_government_debt_quarterly"][T_calibration_quarterly])
 
-    # Load firm interest - prefer quarterly if available, otherwise use annual (will convert later)
-    firm_interest_quarterly = if has_quarterly_firm_interest
-        calibration_data["firm_interest_quarterly"][T_calibration_quarterly]
+    # Load firm interest - prefer quarterly if available, otherwise use annual
+    # (will convert later). We have warned about this upcoming conversion
+    # already in 'import_calibration_data', so no more warnings here.
+    if has_quarterly_firm_interest
+        firm_interest_quarterly = calibration_data["firm_interest_quarterly"][T_calibration_quarterly]
     else
-        @warn "Using annual 'firm_interest' - will apply timescale conversion"
-        calibration_data["firm_interest"][T_calibration]
+        firm_interest_quarterly = calibration_data["firm_interest"][T_calibration]
     end
 
     government_debt_quarterly = calibration_data["government_debt_quarterly"][T_calibration_quarterly]
