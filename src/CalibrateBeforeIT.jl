@@ -46,6 +46,7 @@ const ALL_EUROSTAT_TABLE_IDS = [
     "nasq_10_f_bs",
     "gov_10q_ggdebt",
     "gov_10a_main",
+    "nasa_10_f_bs",
     "nasa_10_nf_tr",
     "nasq_10_nf_tr",    # Quarterly non-financial transactions (firm interest quarterly)
     "gov_10q_ggnfa",    # Quarterly government data (deficit, interest)
