@@ -10,6 +10,7 @@ cd(@__DIR__)
 
 using JLD2: jldsave
 import CalibrateBeforeIT as CBit
+import BeforeIT as Bit
 
 ## Set some parameters for the data-downloading process. `eurostat_path` is
 ## already set to a default directory value, which can be re-set here:
@@ -41,13 +42,8 @@ estimation_date = CBit.DateTime(1996, 12, 31)
 number_sectors = 62;
 
 # ## all countries:
-# all_countries = ["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK"]
-
-# ## countries excluding the non-working ones:
-# HR: 2010-2012
-# MT
-# all_countries = ["AT"]
-all_countries = ["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "NL", "PL", "PT", "RO", "SE", "SI", "SK"]
+all_countries = ["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK"]
+# all_countries = ["LU", "MT"]
 
 ## This step does the same queries as step 5 with import_data(), but with geo ==
 ## "EA19". Only difference is that with EA19, unemployment rates are not used
@@ -103,7 +99,7 @@ for geo in all_countries
     @info "Step 8: Calculate the initial conditions and parameters"
 
     # Get valid quarters that have all required data
-    valid_quarters = CBit.get_valid_calibration_quarters(calibration_object)
+    valid_quarters = Bit.get_valid_calibration_quarters(calibration_object)
     @info "  Found $(length(valid_quarters)) valid quarters for $(geo)"
 
     for (calibration_year, calibration_quarter) in valid_quarters
@@ -113,7 +109,7 @@ for geo in all_countries
 
         try
             parameters, initial_conditions =
-                CBit.get_params_and_initial_conditions(calibration_object,
+                Bit.get_params_and_initial_conditions(calibration_object,
                     calibration_date; scale = 1/1000);
 
             ## Save the parameters and initial conditions
