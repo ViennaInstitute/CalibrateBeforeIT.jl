@@ -345,10 +345,11 @@ function import_calibration_data(geo, start_calibration_year, end_calibration_ye
         SELECT time, SUM(value) as farms
         FROM '$(pqfile("ef_m_farmleg"))'
         WHERE geo='$(geo)'
-          AND indic_ef='HOLD'
+          AND statinfo='TOTAL'
+          AND unit='HLD'
           AND leg_form='TOTAL'
           AND so_eur='TOTAL'
-          AND uaa='TOTAL'
+          AND uaarea='TOTAL'
           AND time IN ($(firm_years_str))
         GROUP BY time
         ORDER BY time
