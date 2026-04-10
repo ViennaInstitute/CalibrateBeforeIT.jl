@@ -58,8 +58,8 @@ end
             if model !== nothing
                 @testset "Single Step Accounting Identities" begin
                     # Run one step
-                    Bit.step!(model; multi_threading=false)
-                    Bit.update_data!(model)
+                    Bit.step!(model; parallel=false)
+                    Bit.collect_data!(model)
 
                     # Use BeforeIT's accounting identity functions
                     income_prod, exp_nominal, exp_real = Bit.get_accounting_identities(model.data)
@@ -96,8 +96,8 @@ end
                     model2 = Bit.Model(params, init_conds)
 
                     for t in 1:5
-                        Bit.step!(model2; multi_threading=false)
-                        Bit.update_data!(model2)
+                        Bit.step!(model2; parallel=false)
+                        Bit.collect_data!(model2)
 
                         @testset "Period $t" begin
                             # Use BeforeIT's accounting identity functions
@@ -149,8 +149,8 @@ end
                     params["kappa_s"] = max.(params["kappa_s"], MIN_PRODUCTIVITY)
 
                     model = Bit.Model(params, init_conds)
-                    Bit.step!(model; multi_threading=false)
-                    Bit.update_data!(model)
+                    Bit.step!(model; parallel=false)
+                    Bit.collect_data!(model)
 
                     # Check ALL accounting identities
                     income_prod, exp_nominal, exp_real = Bit.get_accounting_identities(model.data)
