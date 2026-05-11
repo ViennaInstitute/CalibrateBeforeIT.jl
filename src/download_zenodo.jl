@@ -1,29 +1,19 @@
 using Downloads
 
-# Zenodo download and extraction utilities
 """
 Downloads the zip file from Zenodo and extracts its contents.
 
 # Arguments
 - `zip_file`: Name of the zip file to download
 - `url`: URL to download from
-- `extract_to`: Directory where contents should be extracted
 
 # Returns
 - `String`: Path to the extraction directory
 """
 function download_and_extract_zenodo_data(
-    zip_file::String = "$(ZENODO_ZIP_FILENAME).zip",
+    zip_file::String = ZENODO_ZIP_FILE,
     url::String = ZENODO_URL)
 
-    # # Create extraction directory if it doesn't exist
-    # extract_to = "data/010_eurostat_tables"
-    # if !isdir(extract_to)
-    #     mkpath(extract_to)
-    #     println("Created directory: $extract_to")
-    # end
-
-    # Download the zip file
     if !isfile(zip_file)
         println("Downloading $zip_file from Zenodo...")
         try
@@ -46,31 +36,15 @@ function download_and_extract_zenodo_data(
         println("Zip file already exists: $zip_file")
     end
 
-    # Extract the zip file using ZipArchives.jl (cross-platform)
-    println("Extracting $zip_file to $extract_to...")
+    println("Extracting $zip_file...")
     try
-        data = read(zip_path)
-        archive = ZipReader(data)
-
-        for name in zip_names(archive)
-            out_path = joinpath(extract_to, name)
-
-            # Security: prevent path traversal attacks
-            if !startswith(normpath(out_path), normpath(extract_to))
-                error("Path traversal detected in zip entry: $name")
-            end
-
-            if zip_isdir(archive, name)
-                mkpath(out_path)
-            else
-                mkpath(dirname(out_path))
-                write(out_path, zip_readentry(archive, name))
-            end
-        end
+        run(`$(p7zip()) x -y $(zip_file)`)
         println("Extraction completed successfully!")
     catch e
         error("Failed to extract zip file: $e")
     end
+
+    return eurostat_path
 end
 
 

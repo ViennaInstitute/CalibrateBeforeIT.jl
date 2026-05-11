@@ -22,9 +22,9 @@ all_eurostat_table_ids = CBit.get_eurostat_table_ids()
 
 println(all_eurostat_table_ids)
 
-# Test on a single table
-result = CBit.download_to_parquet("sbs_na_sca_r2", eurostat_path; use_cached_tsv=false)
-println(result)
+# # Test on a single table
+# result = CBit.download_to_parquet("sbs_na_sca_r2", eurostat_path; use_cached_tsv=false)
+# println(result)
 
 # Download all tables
 for table_id in all_eurostat_table_ids

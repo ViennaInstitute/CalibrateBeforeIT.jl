@@ -10,7 +10,7 @@ using Dates
 using JLD2
 using StatsBase ## only for cov in get_params_and_initial_conditions
 using Plots ## for heatmap_missing visualization
-using ZipArchives: ZipReader, zip_names, zip_readentry, zip_isdir
+using p7zip_jll: p7zip
 
 export download_and_extract_zenodo_data, get_eurostat_table_ids,
     combine_tables, pqfile, execute, execute_debug, extract_years,
