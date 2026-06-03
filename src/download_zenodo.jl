@@ -8,21 +8,13 @@ Downloads the zip file from Zenodo and extracts its contents.
 # Arguments
 - `zip_file`: Name of the zip file to download
 - `url`: URL to download from
-- `extract_to`: Directory where contents should be extracted (default: "data/010_eurostat_tables")
 
 # Returns
 - `String`: Path to the extraction directory
 """
 function download_and_extract_zenodo_data(
     zip_file::String = "$(ZENODO_ZIP_FILENAME).zip",
-    url::String = ZENODO_URL,
-    extract_to::String = "data/010_eurostat_tables")
-
-    # Create extraction directory if it doesn't exist
-    if !isdir(extract_to)
-        mkpath(extract_to)
-        println("Created directory: $extract_to")
-    end
+    url::String = ZENODO_URL)
 
     # Download the zip file
     if !isfile(zip_file)
@@ -51,14 +43,9 @@ function download_and_extract_zenodo_data(
     println("Extracting $zip_file...")
     try
         # Use 7z to extract with full paths (-y = assume yes, -o = output directory)
-        run(`$(p7zip()) x -y -o$(extract_to) $(zip_file)`)
+        run(`$(p7zip()) x -y $(zip_file)`)
         println("Extraction completed successfully!")
     catch e
         error("Failed to extract zip file: $e")
     end
-
-    return extract_to
 end
-
-
-
