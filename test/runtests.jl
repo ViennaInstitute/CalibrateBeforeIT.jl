@@ -49,4 +49,8 @@ using Test
         include("test_euro_area_membership.jl")
     end
 
+    @testset "IRT_ST Aggregation Tests" begin
+        include("test_irt_st_aggregation.jl")
+    end
+
 end
