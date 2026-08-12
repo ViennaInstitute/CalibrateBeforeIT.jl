@@ -14,7 +14,8 @@ export download_and_extract_zenodo_data, get_eurostat_table_ids,
     combine_tables, pqfile, execute, execute_debug, extract_years,
     linear_interp_extrap, unify_unemployment_rate_sources,
     get_valid_calibration_quarters, is_euro_area_member, EURO_AREA_JOIN_DATES,
-    _monthly_to_quarterly_mean, _in_sample_interp, _gap_fill_quarterly
+    _monthly_to_quarterly_mean, _in_sample_interp, _gap_fill_quarterly,
+    aggregate_irt_st_monthly_to_quarterly
 
 # Zenodo configuration - TODO: Update these values when the record is published
 const ZENODO_ZIP_FILENAME = "data_eurostat_2026_02_11"

@@ -73,4 +73,64 @@ using CalibrateBeforeIT
         aggregated = [2.0, 4.0, 6.0]
         @test_throws DimensionMismatch CalibrateBeforeIT._gap_fill_quarterly(reported, aggregated)
     end
+
+    @testset "aggregate_irt_st_monthly_to_quarterly: end-to-end on synthetic parquet" begin
+        using DuckDB
+        using Tables
+
+        # Set up a temp directory and override CalibrateBeforeIT.eurostat_path so pqfile() resolves here
+        tmpdir = mktempdir()
+        original_path = CalibrateBeforeIT.eurostat_path
+        Core.eval(CalibrateBeforeIT, :(eurostat_path = $(tmpdir)))
+
+        try
+            conn = DBInterface.connect(DuckDB.DB())
+
+            # Build irt_st_m.parquet: monthly IRT_M3 for a fake geo "ZZ"
+            # 2018 Q1: months 1,2,3 with values 1,2,3 -> quarterly mean 2.0
+            # 2018 Q2: months 4,5,6 with values 4,missing,6 -> interp 5 -> mean 5.0
+            # (no quarterly row reported for Q2 -> gap-fill should pick 5.0)
+            months = ["2018-01", "2018-02", "2018-03",
+                      "2018-04", "2018-05", "2018-06"]
+            mvals  = [1.0, 2.0, 3.0, 4.0, missing, 6.0]
+            DBInterface.execute(conn, "CREATE TABLE m (freq VARCHAR, int_rt VARCHAR, geo VARCHAR, time VARCHAR, value DOUBLE)")
+            values_clause_m = join(["('M','IRT_M3','ZZ','$(m)',$(ismissing(v) ? "NULL" : v))" for (m,v) in zip(months,mvals)], ",")
+            DBInterface.execute(conn, "INSERT INTO m VALUES $(values_clause_m)")
+            DBInterface.execute(conn, "COPY m TO '$(tmpdir)/irt_st_m.parquet' (FORMAT parquet)")
+
+            # Build irt_st_q.parquet: reported quarterly for ZZ at Q1 only (5.0), Q2 missing; plus an EA row to verify preservation
+            DBInterface.execute(conn, "CREATE TABLE q (freq VARCHAR, int_rt VARCHAR, geo VARCHAR, time VARCHAR, value DOUBLE)")
+            DBInterface.execute(conn, "INSERT INTO q VALUES ('Q','IRT_M3','ZZ','2018-Q1',5.0),('Q','IRT_M3','ZZ','2018-Q2',NULL),('Q','IRT_M3','EA','2018-Q1',-0.5)")
+            DBInterface.execute(conn, "COPY q TO '$(tmpdir)/irt_st_q.parquet' (FORMAT parquet)")
+
+            # Run the gap-fill for geo ZZ over 2018..2018
+            CalibrateBeforeIT.aggregate_irt_st_monthly_to_quarterly(
+                conn; start_year=2018, end_year=2018, geos=["ZZ"], int_rt="IRT_M3")
+
+            # Read back irt_st_q.parquet for ZZ
+            res = CalibrateBeforeIT.execute_debug(conn,
+                "SELECT time, value FROM '$(tmpdir)/irt_st_q.parquet' WHERE geo='ZZ' AND int_rt='IRT_M3' ORDER BY time")
+            # The function fills the full quarter grid (Q1-Q4):
+            #   Q1 reported=5.0 preserved
+            #   Q2 gap-filled from monthly mean (4+5+6)/3=5.0
+            #   Q3,Q4 gap-filled from monthly (trailing clamp to last observed 6.0)
+            @test size(res, 1) == 4
+            @test res.time[1] == "2018-Q1"
+            @test res.value[1] == 5.0
+            @test res.time[2] == "2018-Q2"
+            @test res.value[2] == 5.0
+            @test res.time[3] == "2018-Q3"
+            @test res.value[3] == 6.0
+            @test res.time[4] == "2018-Q4"
+            @test res.value[4] == 6.0
+
+            # EA row preserved untouched
+            ea = CalibrateBeforeIT.execute_debug(conn,
+                "SELECT value FROM '$(tmpdir)/irt_st_q.parquet' WHERE geo='EA' AND int_rt='IRT_M3' AND time='2018-Q1'")
+            @test size(ea, 1) == 1
+            @test ea.value[1] == -0.5
+        finally
+            Core.eval(CalibrateBeforeIT, :(eurostat_path = $(original_path)))
+        end
+    end
 end

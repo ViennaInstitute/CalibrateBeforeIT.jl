@@ -91,3 +91,131 @@ function _gap_fill_quarterly(reported::AbstractVector{Union{Missing,Float64}},
     end
     return out
 end
+
+"""
+    aggregate_irt_st_monthly_to_quarterly(conn; start_year, end_year, geos, int_rt="IRT_M3")
+
+For each geo in `geos`, gap-fill `irt_st_q.parquet` with monthly-aggregated
+`int_rt` values: read `irt_st_m`, left-join to the full month grid
+(`start_year..end_year` x 12), in-sample linear-interpolate missing months,
+aggregate to quarterly via mean-of-3-months, then merge — reported quarterly
+preserved, only missing quarters filled from the monthly aggregate. Rows in
+`irt_st_q.parquet` for geos NOT in `geos` (e.g. EA) are left untouched.
+
+The function rewrites `irt_st_q.parquet` in place: it reads all current rows,
+drops the rows for `geos` x `int_rt`, and writes the concatenation of (untouched
+rows) + (gap-filled rows) back via DuckDB `COPY ... TO`.
+
+If `irt_st_m.parquet` does not exist, the function warns and returns without
+modifying `irt_st_q.parquet`.
+"""
+function aggregate_irt_st_monthly_to_quarterly(conn;
+                                                start_year::Int,
+                                                end_year::Int,
+                                                geos::Vector{String},
+                                                int_rt::String="IRT_M3")
+    m_file = pqfile("irt_st_m")
+    q_file = pqfile("irt_st_q")
+
+    if !isfile(m_file)
+        @warn "irt_st_m.parquet not found at $m_file — skipping gap-fill of irt_st_q"
+        return nothing
+    end
+    if !isfile(q_file)
+        @warn "irt_st_q.parquet not found at $q_file — cannot gap-fill"
+        return nothing
+    end
+
+    # Full month grid as "YYYY-MM" strings, in order
+    all_months = String[]
+    for y in start_year:end_year, m in 1:12
+        push!(all_months, string(y, "-", lpad(string(m), 2, '0')))
+    end
+    # Full quarter grid as "YYYY-Qq" strings, in order
+    all_quarters = String[]
+    for y in start_year:end_year, q in 1:4
+        push!(all_quarters, string(y, "-Q", q))
+    end
+    months_str = join(["'$m'" for m in all_months], ",")
+    quarters_str = join(["'$q'" for q in all_quarters], ",")
+
+    # Gap-filled rows accumulated across all geos
+    filled_rows = []  # Vector of NamedTuples (freq, int_rt, geo, time, value)
+
+    for geo in geos
+        # 1. Read monthly for this geo
+        sql = "SELECT time, value FROM '$m_file' WHERE geo='$(geo)' AND int_rt='$(int_rt)' AND time IN ($(months_str)) ORDER BY time"
+        m_raw = execute_debug(conn, sql)  # DataFrame with columns time, value
+        # Build a Dict time -> value (drop missing)
+        m_dict = Dict{String, Float64}()
+        for row in eachrow(m_raw)
+            v = row.value
+            if !ismissing(v) && v !== nothing
+                m_dict[row.time] = Float64(v)
+            end
+        end
+
+        # GUARD: if no monthly data at all, skip this geo (leave irt_st_q unchanged)
+        if isempty(m_dict)
+            @warn "No monthly $(int_rt) data for geo='$(geo)' in irt_st_m — leaving irt_st_q unchanged for this geo"
+            continue
+        end
+
+        # 2. Left-join to full month grid
+        monthly_vec = Vector{Union{Missing,Float64}}(undef, length(all_months))
+        for (i, m) in enumerate(all_months)
+            monthly_vec[i] = haskey(m_dict, m) ? m_dict[m] : missing
+        end
+
+        # 3. In-sample interpolation
+        monthly_interp = _in_sample_interp(monthly_vec)
+
+        # 4. Aggregate to quarterly
+        quarterly_agg = _monthly_to_quarterly_mean(monthly_interp)
+
+        # 5. Read reported quarterly for this geo
+        sql = "SELECT time, value FROM '$q_file' WHERE geo='$(geo)' AND int_rt='$(int_rt)' AND time IN ($(quarters_str)) ORDER BY time"
+        q_raw = execute_debug(conn, sql)
+        q_dict = Dict{String, Union{Missing,Float64}}()
+        for row in eachrow(q_raw)
+            v = row.value
+            q_dict[row.time] = ismissing(v) || v === nothing ? missing : Float64(v)
+        end
+        reported = Vector{Union{Missing,Float64}}(undef, length(all_quarters))
+        for (i, q) in enumerate(all_quarters)
+            reported[i] = haskey(q_dict, q) ? q_dict[q] : missing
+        end
+
+        # 6. Gap-fill
+        filled = _gap_fill_quarterly(reported, quarterly_agg)
+
+        for (i, q) in enumerate(all_quarters)
+            push!(filled_rows, (freq="Q", int_rt=int_rt, geo=geo, time=q, value=filled[i]))
+        end
+    end
+
+    # 7. Rewrite irt_st_q.parquet:
+    #    a. read all rows NOT in (geos x int_rt) -> keep
+    #    b. write kept rows + filled_rows back to a temp parquet, then move
+    geo_filter = join(["(geo='$(g)' AND int_rt='$(int_rt)')" for g in geos], " OR ")
+    keep_sql = "SELECT freq, int_rt, geo, time, value FROM '$q_file' WHERE NOT ($(geo_filter))"
+
+    # Create a temp table with the filled rows, then COPY the union
+    tmp_table = "tmp_irt_st_filled_$(abs(hash((geos, int_rt, start_year, end_year))))"
+    DBInterface.execute(conn, "CREATE OR REPLACE TABLE $(tmp_table) (freq VARCHAR, int_rt VARCHAR, geo VARCHAR, time VARCHAR, value DOUBLE)")
+    if !isempty(filled_rows)
+        values_clause = join(
+            ["('Q','$(int_rt)','$(r.geo)','$(r.time)',$(r.value))" for r in filled_rows],
+            ",")
+        DBInterface.execute(conn, "INSERT INTO $(tmp_table) VALUES $(values_clause)")
+    end
+    union_sql = "$(keep_sql) UNION ALL SELECT freq, int_rt, geo, time, value FROM $(tmp_table)"
+
+    tmp_out = q_file * ".tmp"
+    DBInterface.execute(conn, "COPY ($(union_sql)) TO '$(tmp_out)' (FORMAT parquet)")
+    DBInterface.execute(conn, "DROP TABLE $(tmp_table)")
+
+    mv(tmp_out, q_file; force=true)
+    @info "aggregate_irt_st_monthly_to_quarterly: gap-filled $(length(geos)) geo(s) for int_rt='$(int_rt)' in $q_file"
+    return nothing
+end
