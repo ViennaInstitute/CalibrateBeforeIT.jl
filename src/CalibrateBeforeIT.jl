@@ -32,6 +32,7 @@ const ALL_EUROSTAT_TABLE_IDS = [
     "nama_10_gdp",
     "namq_10_gdp",
     "irt_st_q",
+    "irt_st_m",
     "irt_st_a",
     "nama_10_pe",
     "namq_10_pe",
