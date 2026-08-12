@@ -125,6 +125,10 @@ function aggregate_irt_st_monthly_to_quarterly(conn;
         @warn "irt_st_q.parquet not found at $q_file — cannot gap-fill"
         return nothing
     end
+    if isempty(geos)
+        @warn "aggregate_irt_st_monthly_to_quarterly called with empty geos — nothing to do"
+        return nothing
+    end
 
     # Full month grid as "YYYY-MM" strings, in order
     all_months = String[]
@@ -195,10 +199,11 @@ function aggregate_irt_st_monthly_to_quarterly(conn;
     end
 
     # 7. Rewrite irt_st_q.parquet:
-    #    a. read all rows NOT in (geos x int_rt) -> keep
+    #    a. keep all rows that are NOT (geo in geos AND int_rt) within the grid's
+    #       time range; rows for these geos OUTSIDE the grid are preserved as-is
     #    b. write kept rows + filled_rows back to a temp parquet, then move
     geo_filter = join(["(geo='$(g)' AND int_rt='$(int_rt)')" for g in geos], " OR ")
-    keep_sql = "SELECT freq, int_rt, geo, time, value FROM '$q_file' WHERE NOT ($(geo_filter))"
+    keep_sql = "SELECT freq, int_rt, geo, time, value FROM '$q_file' WHERE NOT ($(geo_filter)) OR time NOT IN ($(quarters_str))"
 
     # Create a temp table with the filled rows, then COPY the union
     tmp_table = "tmp_irt_st_filled_$(abs(hash((geos, int_rt, start_year, end_year))))"
@@ -212,10 +217,13 @@ function aggregate_irt_st_monthly_to_quarterly(conn;
     union_sql = "$(keep_sql) UNION ALL SELECT freq, int_rt, geo, time, value FROM $(tmp_table)"
 
     tmp_out = q_file * ".tmp"
-    DBInterface.execute(conn, "COPY ($(union_sql)) TO '$(tmp_out)' (FORMAT parquet)")
-    DBInterface.execute(conn, "DROP TABLE $(tmp_table)")
-
-    mv(tmp_out, q_file; force=true)
+    try
+        DBInterface.execute(conn, "COPY ($(union_sql)) TO '$(tmp_out)' (FORMAT parquet)")
+        mv(tmp_out, q_file; force=true)
+    finally
+        DBInterface.execute(conn, "DROP TABLE $(tmp_table)")
+        isfile(tmp_out) && rm(tmp_out; force=true)
+    end
     @info "aggregate_irt_st_monthly_to_quarterly: gap-filled $(length(geos)) geo(s) for int_rt='$(int_rt)' in $q_file"
     return nothing
 end
