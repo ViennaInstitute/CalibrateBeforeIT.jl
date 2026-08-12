@@ -45,5 +45,8 @@ using Test
         include("test_sfc_identities.jl")
     end
 
+    @testset "Euro Area Membership Tests" begin
+        include("test_euro_area_membership.jl")
+    end
 
 end
