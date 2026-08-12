@@ -44,6 +44,10 @@ for geo in NON_EA_GEOS
             m_dict[r.time] = Float64(r.value)
         end
     end
+    if isempty(m_dict)
+        @warn "No monthly IRT_M3 data for geo='$(geo)' — skipping"
+        continue
+    end
     monthly_vec = Vector{Union{Missing,Float64}}(undef, length(all_months))
     for (i, m) in enumerate(all_months)
         monthly_vec[i] = haskey(m_dict, m) ? m_dict[m] : missing
