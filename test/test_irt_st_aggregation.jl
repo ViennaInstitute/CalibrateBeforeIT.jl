@@ -133,4 +133,47 @@ using CalibrateBeforeIT
             Core.eval(CalibrateBeforeIT, :(eurostat_path = $(original_path)))
         end
     end
+
+    @testset "aggregate_irt_st_monthly_to_quarterly: geo with no monthly data is preserved" begin
+        using DuckDB
+
+        tmpdir = mktempdir()
+        original_path = CalibrateBeforeIT.eurostat_path
+        Core.eval(CalibrateBeforeIT, :(eurostat_path = $(tmpdir)))
+
+        try
+            conn = DBInterface.connect(DuckDB.DB())
+
+            # irt_st_m with NO rows for geo "YY" (zero monthly data)
+            DBInterface.execute(conn, "CREATE TABLE m (freq VARCHAR, int_rt VARCHAR, geo VARCHAR, time VARCHAR, value DOUBLE)")
+            DBInterface.execute(conn, "INSERT INTO m VALUES ('M','IRT_M3','ZZ','2018-01',1.0),('M','IRT_M3','ZZ','2018-02',2.0),('M','IRT_M3','ZZ','2018-03',3.0)")
+            DBInterface.execute(conn, "COPY m TO '$(tmpdir)/irt_st_m.parquet' (FORMAT parquet)")
+
+            # irt_st_q: ZZ has reported quarterly (should be preserved for YY); YY has reported quarterly that must be left untouched
+            DBInterface.execute(conn, "CREATE TABLE q (freq VARCHAR, int_rt VARCHAR, geo VARCHAR, time VARCHAR, value DOUBLE)")
+            DBInterface.execute(conn, "INSERT INTO q VALUES ('Q','IRT_M3','ZZ','2018-Q1',5.0),('Q','IRT_M3','YY','2018-Q1',9.0),('Q','IRT_M3','YY','2018-Q2',8.0)")
+            DBInterface.execute(conn, "COPY q TO '$(tmpdir)/irt_st_q.parquet' (FORMAT parquet)")
+
+            # Run gap-fill for BOTH ZZ (has monthly) and YY (no monthly)
+            CalibrateBeforeIT.aggregate_irt_st_monthly_to_quarterly(
+                conn; start_year=2018, end_year=2018, geos=["ZZ", "YY"], int_rt="IRT_M3")
+
+            # YY rows must be preserved as-is (spec: leave quarterly unchanged for zero-monthly geo)
+            yy = CalibrateBeforeIT.execute_debug(conn,
+                "SELECT time, value FROM '$(tmpdir)/irt_st_q.parquet' WHERE geo='YY' AND int_rt='IRT_M3' ORDER BY time")
+            @test size(yy, 1) == 2
+            @test yy.time[1] == "2018-Q1"
+            @test yy.value[1] == 9.0
+            @test yy.time[2] == "2018-Q2"
+            @test yy.value[2] == 8.0
+
+            # ZZ was gap-filled (Q1 reported=5.0 preserved, Q2-Q4 filled from monthly clamp=3.0)
+            zz = CalibrateBeforeIT.execute_debug(conn,
+                "SELECT time, value FROM '$(tmpdir)/irt_st_q.parquet' WHERE geo='ZZ' AND int_rt='IRT_M3' ORDER BY time")
+            @test size(zz, 1) == 4
+            @test zz.value[1] == 5.0  # reported preserved
+        finally
+            Core.eval(CalibrateBeforeIT, :(eurostat_path = $(original_path)))
+        end
+    end
 end

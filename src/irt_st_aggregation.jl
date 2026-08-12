@@ -145,6 +145,7 @@ function aggregate_irt_st_monthly_to_quarterly(conn;
 
     # Gap-filled rows accumulated across all geos
     filled_rows = []  # Vector of NamedTuples (freq, int_rt, geo, time, value)
+    filled_geos = String[]  # only geos actually gap-filled (rows of these get dropped+rewritten)
 
     for geo in geos
         # 1. Read monthly for this geo
@@ -196,13 +197,19 @@ function aggregate_irt_st_monthly_to_quarterly(conn;
         for (i, q) in enumerate(all_quarters)
             push!(filled_rows, (freq="Q", int_rt=int_rt, geo=geo, time=q, value=filled[i]))
         end
+        push!(filled_geos, geo)
     end
 
     # 7. Rewrite irt_st_q.parquet:
-    #    a. keep all rows that are NOT (geo in geos AND int_rt) within the grid's
-    #       time range; rows for these geos OUTSIDE the grid are preserved as-is
+    #    a. keep all rows that are NOT (geo in filled_geos AND int_rt) within the
+    #       grid's time range; geos with no monthly data are NOT in filled_geos,
+    #       so their rows are preserved as-is (spec: leave their quarterly unchanged)
     #    b. write kept rows + filled_rows back to a temp parquet, then move
-    geo_filter = join(["(geo='$(g)' AND int_rt='$(int_rt)')" for g in geos], " OR ")
+    if isempty(filled_geos)
+        @warn "No geos were gap-filled (none had monthly data) — leaving irt_st_q unchanged"
+        return nothing
+    end
+    geo_filter = join(["(geo='$(g)' AND int_rt='$(int_rt)')" for g in filled_geos], " OR ")
     keep_sql = "SELECT freq, int_rt, geo, time, value FROM '$q_file' WHERE NOT ($(geo_filter)) OR time NOT IN ($(quarters_str))"
 
     # Create a temp table with the filled rows, then COPY the union
