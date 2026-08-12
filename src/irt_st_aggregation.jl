@@ -1,6 +1,3 @@
-using Dates
-using Interpolations
-
 """
     _monthly_to_quarterly_mean(monthly::AbstractVector) -> Vector{Float64}
 
@@ -20,7 +17,7 @@ function _monthly_to_quarterly_mean(monthly::AbstractVector)
 end
 
 """
-    _in_sample_interp(v::AbstractVector{Union{Missing,Float64}}) -> Vector{Union{Missing,Float64}}
+    _in_sample_interp(v::AbstractVector{<:Union{Missing,Real}}) -> Vector{Union{Missing,Float64}}
 
 Linearly interpolate interior missing values; clamp leading/trailing missing
 to the nearest observed value (no extrapolation). If all values are missing,

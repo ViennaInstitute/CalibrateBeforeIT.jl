@@ -1,6 +1,5 @@
 using Test
 using CalibrateBeforeIT
-using Dates
 
 @testset "IRT_ST Aggregation Tests" begin
 
