@@ -49,4 +49,21 @@ success, rows = CBit.create_enterprise_statistics_a64_data("sbs_ovw_act",
 # test = "SELECT * FROM '$(pqfile("bd_9ac_l_form_a64"))' LIMIT 10;"
 # DBInterface.execute(conn, test)
 
+
+##------------------------------------------------------------
+## Step 5: Gap-fill irt_st_q with monthly-aggregated IRT_M3 for non-EA countries
+##
+## Non-EA EU countries (BG, CZ, DK, HU, PL, RO, SE) need their own 3-month short
+## rate, not the EA Euribor. Eurostat stopped deriving irt_st_q for 5 of these
+## (BG/CZ/HU/PL/RO) after 2015Q1; the monthly source irt_st_m is complete, so we
+## aggregate it to quarterly (mean of 3 months) and gap-fill irt_st_q in place.
+## Reported quarterly values are preserved; only missing quarters are filled.
+start_year_irt = 1996
+end_year_irt = 2024
+non_ea_geos = ["BG", "CZ", "DK", "HU", "PL", "RO", "SE"]
+CBit.aggregate_irt_st_monthly_to_quarterly(conn;
+    start_year=start_year_irt, end_year=end_year_irt,
+    geos=non_ea_geos, int_rt="IRT_M3")
+@info "Step 5 completed: irt_st_q gap-filled for non-EA countries"
+
 ## After this step, we have the necessary data stored on disk!
