@@ -372,11 +372,12 @@ function import_data(geo, start_year, end_year)
     data["nominal_imports_growth_quarterly"]=data["real_imports_growth_quarterly"]+data["imports_deflator_growth_quarterly"];
 
 
-    ## 3-month short rate: euribor (geo='EA') for EA members, national IBOR
-    ## (geo='$(geo)') for non-EA members. For non-EA, irt_st_q must have been
-    ## gap-filled by aggregate_irt_st_monthly_to_quarterly (02_preprocess, Step 5).
+    ## 3-month short rate: euribor (geo='EA') for EA members and EA aggregates
+    ## (EA19/EA20/EA21), national IBOR (geo='$(geo)') for non-EA members. For
+    ## non-EA, irt_st_q must have been gap-filled by
+    ## aggregate_irt_st_monthly_to_quarterly (02_preprocess, Step 5).
     ea_member = is_euro_area_member(geo, Date(end_year, 12, 31))
-    euribor_geo = ea_member ? "EA" : geo
+    euribor_geo = (ea_member || geo in ("EA", "EA19", "EA20", "EA21")) ? "EA" : geo
     sqlquery="SELECT value FROM '$(pqfile("irt_st_q"))' WHERE time IN ($(quarters_str)) AND geo='$(euribor_geo)' AND int_rt='IRT_M3' ORDER BY time"
     data["euribor"]=0.01*execute(conn,sqlquery);
 
