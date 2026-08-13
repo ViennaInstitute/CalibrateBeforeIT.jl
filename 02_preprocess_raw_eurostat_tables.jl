@@ -3,6 +3,10 @@
 ## show the usual application
 
 cd(@__DIR__)
+using Revise
+using Pkg
+Pkg.activate(".")
+using DuckDB, Tables, DataFrames, JLD2
 
 import CalibrateBeforeIT as CBit
 
@@ -51,13 +55,28 @@ success, rows = CBit.create_enterprise_statistics_a64_data("sbs_ovw_act",
 
 
 ##------------------------------------------------------------
-## Step 5: Gap-fill irt_st_q with monthly-aggregated IRT_M3 for non-EA countries
+## Step 5: Gap-fill irt_st_q with monthly-aggregated IRT_M3
+## for non-EA countries
 ##
-## Non-EA EU countries (BG, CZ, DK, HU, PL, RO, SE) need their own 3-month short
-## rate, not the EA Euribor. Eurostat stopped deriving irt_st_q for 5 of these
-## (BG/CZ/HU/PL/RO) after 2015Q1; the monthly source irt_st_m is complete, so we
-## aggregate it to quarterly (mean of 3 months) and gap-fill irt_st_q in place.
-## Reported quarterly values are preserved; only missing quarters are filled.
+## Non-EA EU countries (BG, CZ, DK, HU, PL, RO, SE) need their own
+## 3-month short rate, not the EA Euribor. Eurostat stopped deriving
+## irt_st_q for 5 of these (BG/CZ/HU/PL/RO) after 2015Q1; the monthly
+## source irt_st_m is complete, so we aggregate it to quarterly (mean
+## of 3 months) and gap-fill. Reported quarterly values are preserved;
+## only missing quarters are filled.
+##
+## The as-downloaded irt_st_q.parquet is renamed to irt_st_q_raw.parquet
+## (the unmodified reported series). The gap-filled result is written to
+## irt_st_q.parquet, which is what import_data.jl reads.
+irt_st_q_path = joinpath(eurostat_path, "irt_st_q.parquet")
+irt_st_q_raw_path = joinpath(eurostat_path, "irt_st_q_raw.parquet")
+if isfile(irt_st_q_path) && !isfile(irt_st_q_raw_path)
+    mv(irt_st_q_path, irt_st_q_raw_path)
+    @info "Renamed irt_st_q.parquet -> irt_st_q_raw.parquet"
+elseif isfile(irt_st_q_raw_path)
+    @info "irt_st_q_raw.parquet already exists; using it as the reported source"
+end
+
 start_year_irt = 1996
 end_year_irt = 2024
 non_ea_geos = ["BG", "CZ", "DK", "HU", "PL", "RO", "SE"]

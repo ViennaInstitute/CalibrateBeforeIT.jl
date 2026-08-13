@@ -95,19 +95,20 @@ end
 """
     aggregate_irt_st_monthly_to_quarterly(conn; start_year, end_year, geos, int_rt="IRT_M3")
 
-For each geo in `geos`, gap-fill `irt_st_q.parquet` with monthly-aggregated
-`int_rt` values: read `irt_st_m`, left-join to the full month grid
-(`start_year..end_year` x 12), in-sample linear-interpolate missing months,
-aggregate to quarterly via mean-of-3-months, then merge — reported quarterly
-preserved, only missing quarters filled from the monthly aggregate. Rows in
-`irt_st_q.parquet` for geos NOT in `geos` (e.g. EA) are left untouched.
+For each geo in `geos`, produce a gap-filled `irt_st_q.parquet` from the
+monthly-aggregated `int_rt` values: read `irt_st_m`, left-join to the full
+month grid (`start_year..end_year` x 12), in-sample linear-interpolate missing
+months, aggregate to quarterly via mean-of-3-months, then merge — reported
+quarterly (from `irt_st_q_raw.parquet`) preserved, only missing quarters filled
+from the monthly aggregate. Rows in `irt_st_q_raw.parquet` for geos NOT in
+`geos` (e.g. EA) are copied through unchanged.
 
-The function rewrites `irt_st_q.parquet` in place: it reads all current rows,
-drops the rows for `geos` x `int_rt`, and writes the concatenation of (untouched
-rows) + (gap-filled rows) back via DuckDB `COPY ... TO`.
+The function reads from `irt_st_q_raw.parquet` (the as-downloaded reported
+quarterly) and writes the gap-filled result to `irt_st_q.parquet` via DuckDB
+`COPY ... TO`. If `irt_st_q.parquet` already exists it is overwritten.
 
-If `irt_st_m.parquet` does not exist, the function warns and returns without
-modifying `irt_st_q.parquet`.
+If `irt_st_m.parquet` or `irt_st_q_raw.parquet` does not exist, the function
+warns and returns without writing `irt_st_q.parquet`.
 """
 function aggregate_irt_st_monthly_to_quarterly(conn;
                                                 start_year::Int,
@@ -115,14 +116,15 @@ function aggregate_irt_st_monthly_to_quarterly(conn;
                                                 geos::Vector{String},
                                                 int_rt::String="IRT_M3")
     m_file = pqfile("irt_st_m")
+    q_raw_file = pqfile("irt_st_q_raw")
     q_file = pqfile("irt_st_q")
 
     if !isfile(m_file)
         @warn "irt_st_m.parquet not found at $m_file — skipping gap-fill of irt_st_q"
         return nothing
     end
-    if !isfile(q_file)
-        @warn "irt_st_q.parquet not found at $q_file — cannot gap-fill"
+    if !isfile(q_raw_file)
+        @warn "irt_st_q_raw.parquet not found at $q_raw_file — cannot gap-fill"
         return nothing
     end
     if isempty(geos)
@@ -178,8 +180,8 @@ function aggregate_irt_st_monthly_to_quarterly(conn;
         # 4. Aggregate to quarterly
         quarterly_agg = _monthly_to_quarterly_mean(monthly_interp)
 
-        # 5. Read reported quarterly for this geo
-        sql = "SELECT time, value FROM '$q_file' WHERE geo='$(geo)' AND int_rt='$(int_rt)' AND time IN ($(quarters_str)) ORDER BY time"
+        # 5. Read reported quarterly for this geo (from the raw, pre-gap-fill file)
+        sql = "SELECT time, value FROM '$q_raw_file' WHERE geo='$(geo)' AND int_rt='$(int_rt)' AND time IN ($(quarters_str)) ORDER BY time"
         q_raw = execute_debug(conn, sql)
         q_dict = Dict{String, Union{Missing,Float64}}()
         for row in eachrow(q_raw)
@@ -200,17 +202,18 @@ function aggregate_irt_st_monthly_to_quarterly(conn;
         push!(filled_geos, geo)
     end
 
-    # 7. Rewrite irt_st_q.parquet:
-    #    a. keep all rows that are NOT (geo in filled_geos AND int_rt) within the
-    #       grid's time range; geos with no monthly data are NOT in filled_geos,
-    #       so their rows are preserved as-is (spec: leave their quarterly unchanged)
-    #    b. write kept rows + filled_rows back to a temp parquet, then move
+    # 7. Write irt_st_q.parquet (gap-filled) from irt_st_q_raw.parquet (reported):
+    #    a. keep all rows from raw that are NOT (geo in filled_geos AND int_rt)
+    #       within the grid's time range; geos with no monthly data are NOT in
+    #       filled_geos, so their rows are copied through unchanged
+    #    b. write kept rows + filled_rows to irt_st_q.parquet via COPY
     if isempty(filled_geos)
-        @warn "No geos were gap-filled (none had monthly data) — leaving irt_st_q unchanged"
+        @warn "No geos were gap-filled (none had monthly data) — copying irt_st_q_raw to irt_st_q unchanged"
+        DBInterface.execute(conn, "COPY (SELECT * FROM '$q_raw_file') TO '$q_file' (FORMAT parquet)")
         return nothing
     end
     geo_filter = join(["(geo='$(g)' AND int_rt='$(int_rt)')" for g in filled_geos], " OR ")
-    keep_sql = "SELECT freq, int_rt, geo, time, value FROM '$q_file' WHERE NOT ($(geo_filter)) OR time NOT IN ($(quarters_str))"
+    keep_sql = "SELECT freq, int_rt, geo, time, value FROM '$q_raw_file' WHERE NOT ($(geo_filter)) OR time NOT IN ($(quarters_str))"
 
     # Create a temp table with the filled rows, then COPY the union
     tmp_table = "tmp_irt_st_filled_$(abs(hash((geos, int_rt, start_year, end_year))))"
@@ -231,6 +234,6 @@ function aggregate_irt_st_monthly_to_quarterly(conn;
         DBInterface.execute(conn, "DROP TABLE $(tmp_table)")
         isfile(tmp_out) && rm(tmp_out; force=true)
     end
-    @info "aggregate_irt_st_monthly_to_quarterly: gap-filled $(length(geos)) geo(s) for int_rt='$(int_rt)' in $q_file"
+    @info "aggregate_irt_st_monthly_to_quarterly: gap-filled $(length(filled_geos)) geo(s) for int_rt='$(int_rt)'; wrote $q_file (from $q_raw_file)"
     return nothing
 end

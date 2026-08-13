@@ -98,10 +98,10 @@ using CalibrateBeforeIT
             DBInterface.execute(conn, "INSERT INTO m VALUES $(values_clause_m)")
             DBInterface.execute(conn, "COPY m TO '$(tmpdir)/irt_st_m.parquet' (FORMAT parquet)")
 
-            # Build irt_st_q.parquet: reported quarterly for ZZ at Q1 only (5.0), Q2 missing; plus an EA row to verify preservation
+            # Build irt_st_q_raw.parquet: reported quarterly for ZZ at Q1 only (5.0), Q2 missing; plus an EA row to verify preservation
             DBInterface.execute(conn, "CREATE TABLE q (freq VARCHAR, int_rt VARCHAR, geo VARCHAR, time VARCHAR, value DOUBLE)")
             DBInterface.execute(conn, "INSERT INTO q VALUES ('Q','IRT_M3','ZZ','2018-Q1',5.0),('Q','IRT_M3','ZZ','2018-Q2',NULL),('Q','IRT_M3','EA','2018-Q1',-0.5)")
-            DBInterface.execute(conn, "COPY q TO '$(tmpdir)/irt_st_q.parquet' (FORMAT parquet)")
+            DBInterface.execute(conn, "COPY q TO '$(tmpdir)/irt_st_q_raw.parquet' (FORMAT parquet)")
 
             # Run the gap-fill for geo ZZ over 2018..2018
             CalibrateBeforeIT.aggregate_irt_st_monthly_to_quarterly(
@@ -149,10 +149,10 @@ using CalibrateBeforeIT
             DBInterface.execute(conn, "INSERT INTO m VALUES ('M','IRT_M3','ZZ','2018-01',1.0),('M','IRT_M3','ZZ','2018-02',2.0),('M','IRT_M3','ZZ','2018-03',3.0)")
             DBInterface.execute(conn, "COPY m TO '$(tmpdir)/irt_st_m.parquet' (FORMAT parquet)")
 
-            # irt_st_q: ZZ has reported quarterly (should be preserved for YY); YY has reported quarterly that must be left untouched
+            # irt_st_q_raw: ZZ has reported quarterly; YY has reported quarterly that must be left untouched
             DBInterface.execute(conn, "CREATE TABLE q (freq VARCHAR, int_rt VARCHAR, geo VARCHAR, time VARCHAR, value DOUBLE)")
             DBInterface.execute(conn, "INSERT INTO q VALUES ('Q','IRT_M3','ZZ','2018-Q1',5.0),('Q','IRT_M3','YY','2018-Q1',9.0),('Q','IRT_M3','YY','2018-Q2',8.0)")
-            DBInterface.execute(conn, "COPY q TO '$(tmpdir)/irt_st_q.parquet' (FORMAT parquet)")
+            DBInterface.execute(conn, "COPY q TO '$(tmpdir)/irt_st_q_raw.parquet' (FORMAT parquet)")
 
             # Run gap-fill for BOTH ZZ (has monthly) and YY (no monthly)
             CalibrateBeforeIT.aggregate_irt_st_monthly_to_quarterly(
