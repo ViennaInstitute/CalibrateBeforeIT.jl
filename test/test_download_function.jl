@@ -6,6 +6,31 @@ Minimal test for the download_to_parquet function.
 
 using Test
 import CalibrateBeforeIT as CBit
+import p7zip_jll
+
+@testset "Zenodo archive extraction layout" begin
+    mktempdir() do temp_dir
+        archive = joinpath(temp_dir, "fixture.zip")
+        source_root = joinpath(temp_dir, "source")
+        relative_payload = joinpath("data", "010_eurostat_tables", "payload.txt")
+        source_payload = joinpath(source_root, relative_payload)
+        mkpath(dirname(source_payload))
+        write(source_payload, "layout preserved")
+
+        cd(source_root) do
+            run(`$(p7zip_jll.p7zip()) a -tzip $archive data`)
+        end
+
+        extract_root = joinpath(temp_dir, "extract")
+        mkpath(extract_root)
+        cd(extract_root) do
+            CBit.download_and_extract_zenodo_data(archive, "unused")
+        end
+
+        @test read(joinpath(extract_root, relative_payload), String) ==
+              "layout preserved"
+    end
+end
 
 @testset "download_to_parquet function" begin
 
