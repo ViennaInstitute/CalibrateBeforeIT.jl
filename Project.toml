@@ -25,7 +25,7 @@ p7zip_jll = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
 
 [compat]
 BeforeIT = "0"
-CSV = "0.10.15"
+CSV = ">= 0.10.15"
 DataFrames = "1.7.0"
 Dates = ">= 1.10.0"
 Downloads = "1.6.0"
