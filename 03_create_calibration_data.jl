@@ -31,6 +31,9 @@ end
 
 ##------------------------------------------------------------
 ## Step 4: "Import EA data"
+model_scale = 1/100
+# model_scale = 1/1000
+# model_scale = 1/10000
 
 ## For `import_data`:
 start_year = 1996
@@ -91,8 +94,8 @@ for geo in all_countries
         max_calibration_date, estimation_date)
 
     ## Save the calibration object
-    mkpath("$(CBit.calibration_output_path)/$(geo)")
-    jldsave("$(CBit.calibration_output_path)/$(geo)/calibration_object.jld2";
+    mkpath("$(CBit.calibration_output_path)/scale=$(model_scale)/$(geo)")
+    jldsave("$(CBit.calibration_output_path)/scale=$(model_scale)/$(geo)/$(geo)_calibration_object.jld2";
         calibration_object = calibration_object)
 
     ##------------------------------------------------------------
@@ -110,10 +113,10 @@ for geo in all_countries
         try
             parameters, initial_conditions =
                 Bit.get_params_and_initial_conditions(calibration_object,
-                    calibration_date; scale = 1/1000);
+                    calibration_date; scale = model_scale);
 
             ## Save the parameters and initial conditions
-            jldsave("$(CBit.calibration_output_path)/$(geo)/$(calibration_year)Q$(calibration_quarter)_parameters_initial_conditions.jld2";
+            jldsave("$(CBit.calibration_output_path)/scale=$(model_scale)/$(geo)/$(calibration_year)Q$(calibration_quarter)_parameters_initial_conditions.jld2";
                 parameters = parameters,
                 initial_conditions = initial_conditions)
         catch e
