@@ -1,20 +1,8 @@
-using DuckDB
-
 function unify_unemployment_rate_sources(table_id::String,
     conn)
 
     table_id_new_data = table_id
     table_id_old_data = "$(table_id)_h"
-
-    # For the new data source (e.g., une_rt_a), keep only non-missing entries
-    sqlquery = """
-    COPY (
-    SELECT * FROM '$(pqfile(table_id_new_data))'
-    WHERE value IS NOT NULL
-    )
-    TO '$(pqfile(table_id_new_data))' (FORMAT parquet)
-    """
-    DBInterface.execute(conn,sqlquery);
 
     if table_id_new_data == "une_rt_a"
         quarterly_adjustment = ""
@@ -23,7 +11,8 @@ function unify_unemployment_rate_sources(table_id::String,
     end
 
     # Append the "historical" data (with id ending in "_h") to the "current"
-    # time series to have one long-running time series:
+    # time series to have one long-running time series. Only non-missing
+    # entries of both sources are kept:
     sqlquery = """
     COPY (
     WITH table1 as (
@@ -53,9 +42,3 @@ function unify_unemployment_rate_sources(table_id::String,
 
     return res_query
 end
-
-# execute(conn, "SELECT COUNT(*) FROM '$(pqfile("une_rt_a"))'")
-# execute(conn, "SELECT COUNT(*) FROM '$(pqfile("une_rt_a_h"))'")
-
-# execute(conn, "SELECT COUNT(*) FROM '$(pqfile("une_rt_q"))'")
-# execute(conn, "SELECT COUNT(*) FROM '$(pqfile("une_rt_q_h"))'")

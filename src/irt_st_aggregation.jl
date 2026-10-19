@@ -25,10 +25,7 @@ return the input unchanged.
 """
 function _in_sample_interp(v::AbstractVector{<:Union{Missing,Real}})
     n = length(v)
-    out = Vector{Union{Missing,Float64}}(undef, n)
-    for i in 1:n
-        out[i] = v[i]
-    end
+    out = Vector{Union{Missing,Float64}}(v)
 
     observed = findall(!ismissing, v)
     if isempty(observed)
@@ -37,11 +34,7 @@ function _in_sample_interp(v::AbstractVector{<:Union{Missing,Real}})
 
     # Leading: clamp to first observed
     first_obs = observed[1]
-    if first_obs > 1
-        for i in 1:(first_obs - 1)
-            out[i] = v[first_obs]
-        end
-    end
+    out[1:(first_obs - 1)] .= v[first_obs]
 
     # Interior: linear interpolation between surrounding observed points
     for k in 2:length(observed)
@@ -59,11 +52,7 @@ function _in_sample_interp(v::AbstractVector{<:Union{Missing,Real}})
 
     # Trailing: clamp to last observed
     last_obs = observed[end]
-    if last_obs < n
-        for i in (last_obs + 1):n
-            out[i] = v[last_obs]
-        end
-    end
+    out[(last_obs + 1):n] .= v[last_obs]
 
     return out
 end
@@ -81,15 +70,7 @@ function _gap_fill_quarterly(reported::AbstractVector{Union{Missing,Float64}},
         throw(DimensionMismatch(
             "reported (len=$(length(reported))) and aggregated (len=$(length(aggregated))) must have the same length"))
     end
-    out = Vector{Float64}(undef, length(reported))
-    for i in eachindex(reported)
-        if ismissing(reported[i])
-            out[i] = Float64(aggregated[i])
-        else
-            out[i] = Float64(reported[i])
-        end
-    end
-    return out
+    return Float64.(coalesce.(reported, aggregated))
 end
 
 """
@@ -132,18 +113,11 @@ function aggregate_irt_st_monthly_to_quarterly(conn;
         return nothing
     end
 
-    # Full month grid as "YYYY-MM" strings, in order
-    all_months = String[]
-    for y in start_year:end_year, m in 1:12
-        push!(all_months, string(y, "-", lpad(string(m), 2, '0')))
-    end
-    # Full quarter grid as "YYYY-Qq" strings, in order
-    all_quarters = String[]
-    for y in start_year:end_year, q in 1:4
-        push!(all_quarters, string(y, "-Q", q))
-    end
-    months_str = join(["'$m'" for m in all_months], ",")
-    quarters_str = join(["'$q'" for q in all_quarters], ",")
+    # Full month grid as "YYYY-MM" and quarter grid as "YYYY-Qq" strings, in order
+    all_months = [string(y, "-", lpad(string(m), 2, '0')) for y in start_year:end_year for m in 1:12]
+    all_quarters = [string(y, "-Q", q) for y in start_year:end_year for q in 1:4]
+    months_str = sql_list(all_months)
+    quarters_str = sql_list(all_quarters)
 
     # Gap-filled rows accumulated across all geos
     filled_rows = []  # Vector of NamedTuples (freq, int_rt, geo, time, value)
@@ -154,13 +128,8 @@ function aggregate_irt_st_monthly_to_quarterly(conn;
         sql = "SELECT time, value FROM '$m_file' WHERE geo='$(geo)' AND int_rt='$(int_rt)' AND time IN ($(months_str)) ORDER BY time"
         m_raw = execute_debug(conn, sql)  # DataFrame with columns time, value
         # Build a Dict time -> value (drop missing)
-        m_dict = Dict{String, Float64}()
-        for row in eachrow(m_raw)
-            v = row.value
-            if !ismissing(v) && v !== nothing
-                m_dict[row.time] = Float64(v)
-            end
-        end
+        m_dict = Dict{String, Float64}(row.time => row.value
+                                       for row in eachrow(m_raw) if !ismissing(row.value))
 
         # GUARD: if no monthly data at all, skip this geo (leave irt_st_q unchanged)
         if isempty(m_dict)
@@ -169,10 +138,7 @@ function aggregate_irt_st_monthly_to_quarterly(conn;
         end
 
         # 2. Left-join to full month grid
-        monthly_vec = Vector{Union{Missing,Float64}}(undef, length(all_months))
-        for (i, m) in enumerate(all_months)
-            monthly_vec[i] = haskey(m_dict, m) ? m_dict[m] : missing
-        end
+        monthly_vec = Union{Missing,Float64}[get(m_dict, m, missing) for m in all_months]
 
         # 3. In-sample interpolation
         monthly_interp = _in_sample_interp(monthly_vec)
@@ -183,15 +149,8 @@ function aggregate_irt_st_monthly_to_quarterly(conn;
         # 5. Read reported quarterly for this geo (from the raw, pre-gap-fill file)
         sql = "SELECT time, value FROM '$q_raw_file' WHERE geo='$(geo)' AND int_rt='$(int_rt)' AND time IN ($(quarters_str)) ORDER BY time"
         q_raw = execute_debug(conn, sql)
-        q_dict = Dict{String, Union{Missing,Float64}}()
-        for row in eachrow(q_raw)
-            v = row.value
-            q_dict[row.time] = ismissing(v) || v === nothing ? missing : Float64(v)
-        end
-        reported = Vector{Union{Missing,Float64}}(undef, length(all_quarters))
-        for (i, q) in enumerate(all_quarters)
-            reported[i] = haskey(q_dict, q) ? q_dict[q] : missing
-        end
+        q_dict = Dict{String, Union{Missing,Float64}}(row.time => row.value for row in eachrow(q_raw))
+        reported = Union{Missing,Float64}[get(q_dict, q, missing) for q in all_quarters]
 
         # 6. Gap-fill
         filled = _gap_fill_quarterly(reported, quarterly_agg)

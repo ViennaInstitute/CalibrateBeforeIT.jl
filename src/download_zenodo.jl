@@ -1,6 +1,3 @@
-using Downloads
-using p7zip_jll
-
 # Zenodo download and extraction utilities
 """
 Downloads the zip file from Zenodo and extracts its contents.
