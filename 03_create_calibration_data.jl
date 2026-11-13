@@ -31,8 +31,8 @@ end
 
 ##------------------------------------------------------------
 ## Step 4: "Import EA data"
-model_scale = 1/100
-# model_scale = 1/1000
+# model_scale = 1/100
+model_scale = 1/1000
 # model_scale = 1/10000
 
 ## For `import_data`:
@@ -93,34 +93,38 @@ for geo in all_countries
         ea_data,
         max_calibration_date, estimation_date)
 
-    ## Save the calibration object
-    mkpath("$(CBit.calibration_output_path)/scale=$(model_scale)/$(geo)")
-    jldsave("$(CBit.calibration_output_path)/scale=$(model_scale)/$(geo)/$(geo)_calibration_object.jld2";
-        calibration_object = calibration_object)
-
     ##------------------------------------------------------------
-    @info "Step 8: Calculate the initial conditions and parameters"
+    for model_scale in [1/100, 1/1000, 1/10000]
+        ## Save the calibration object
+        mkpath("$(CBit.calibration_output_path)/scale=$(model_scale)/$(geo)")
+        ## Note: the calibration object is scale-independent. It is jus for
+        ## convenience that we save it per-scale.
+        jldsave("$(CBit.calibration_output_path)/scale=$(model_scale)/$(geo)/$(geo)_calibration_object.jld2";
+            calibration_object = calibration_object)
 
-    # Get valid quarters that have all required data
-    valid_quarters = Bit.get_valid_calibration_quarters(calibration_object)
-    @info "  Found $(length(valid_quarters)) valid quarters for $(geo)"
+        @info "Step 8: Calculate the initial conditions and parameters, using scale=$(model_scale)"
 
-    for (calibration_year, calibration_quarter) in valid_quarters
-        calibration_month = calibration_quarter * 3
-        calibration_date = CBit.DateTime(calibration_year, calibration_month,
-            calibration_month in [3, 12] ? 31 : 30);
+        # Get valid quarters that have all required data
+        valid_quarters = Bit.get_valid_calibration_quarters(calibration_object)
+        @info "  Found $(length(valid_quarters)) valid quarters for $(geo)"
 
-        try
-            parameters, initial_conditions =
-                Bit.get_params_and_initial_conditions(calibration_object,
-                    calibration_date; scale = model_scale);
+        for (calibration_year, calibration_quarter) in valid_quarters
+            calibration_month = calibration_quarter * 3
+            calibration_date = CBit.DateTime(calibration_year, calibration_month,
+                calibration_month in [3, 12] ? 31 : 30);
 
-            ## Save the parameters and initial conditions
-            jldsave("$(CBit.calibration_output_path)/scale=$(model_scale)/$(geo)/$(calibration_year)Q$(calibration_quarter)_parameters_initial_conditions.jld2";
-                parameters = parameters,
-                initial_conditions = initial_conditions)
-        catch e
-            @warn "  Skipping $(geo) $(calibration_year)Q$(calibration_quarter): $e"
+            try
+                parameters, initial_conditions =
+                    Bit.get_params_and_initial_conditions(calibration_object,
+                        calibration_date; scale = model_scale);
+
+                ## Save the parameters and initial conditions
+                jldsave("$(CBit.calibration_output_path)/scale=$(model_scale)/$(geo)/$(calibration_year)Q$(calibration_quarter)_parameters_initial_conditions.jld2";
+                    parameters = parameters,
+                    initial_conditions = initial_conditions)
+            catch e
+                @warn "  Skipping $(geo) $(calibration_year)Q$(calibration_quarter): $e"
+            end
         end
     end
 end
