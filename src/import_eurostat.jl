@@ -1,13 +1,3 @@
-# module Import_Eurostat
-# export remove_flags_parse_to_float, transform_columns, download_to_parquet
-# using CSV
-# using DataFrames
-# using Downloads
-# using QuackIO
-
-using Dates  # For now() function in metadata
-
-
 # Function to process each element, remove Eurostat flags and try to convert it
 # to Float64
 function remove_flags_parse_to_float(value)
@@ -17,15 +7,12 @@ function remove_flags_parse_to_float(value)
         return missing
     else
         # Remove all non-digit characters and convert to Float64
-        # filtered_value = replace(value, r"[^0-9|.]" => "")
-        # filtered_value = replace(value, r" +[a-z]+" => "")
         filtered_value = replace(value, r":? +[^0-9|.]+$" => "")
         filtered_value = replace(filtered_value, r" +" => "")
         parsed_value = tryparse(Float64, filtered_value)
         return isnothing(parsed_value) ? missing : parsed_value
     end
 end
-# remove_flags_parse_to_float("13.344 b")
 
 # Function to apply to each column of the DataFrame
 function transform_columns(df, cols)
@@ -483,5 +470,3 @@ function combine_tables(eurostat_path::String;
         end
     end
 end
-
-# end

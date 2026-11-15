@@ -1,5 +1,3 @@
-using Dates
-
 """
     EURO_AREA_JOIN_DATES
 

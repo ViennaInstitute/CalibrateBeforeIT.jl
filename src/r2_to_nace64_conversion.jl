@@ -6,48 +6,9 @@ from the detailed NACE Rev.2 system to the simplified 64-industry framework
 used by economic models like BeforeIT.jl.
 """
 
-using DuckDB
-
-"""
-    create_business_demographic_a64_data(eurostat_path::String, conn;
-                            excluded_industries::Vector{String} = ["L68A", "T", "U"])
-
-Convert business demography data from NACE Rev.2 to NACE64 classification.
-
-Creates `bd_9ac_l_form_r2_a64.parquet` from `bd_9ac_l_form_r2.parquet` by:
-1. Mapping NACE Rev.2 codes to NACE64 using regex patterns
-2. Aggregating values where multiple Rev.2 codes map to one NACE64 code
-3. Creating complete dimensional grid (industry×geo×indicator×legal_form×time)
-4. Filling gaps with NULL values for missing combinations
-
-# Arguments
-- `eurostat_path::String`: Directory containing input/output Parquet files
-- `conn`: DuckDB database connection
-- `excluded_industries::Vector{String}`: NACE64 industries to exclude from output
-
-# Files Required
-- `$(eurostat_path)/nace64.parquet`: Industry classification mapping table
-- `$(eurostat_path)/bd_9ac_l_form_r2.parquet`: Input business demography data
-
-# Files Created
-- `$(eurostat_path)/bd_9ac_l_form_r2_a64.parquet`: Output data in NACE64 format
-
-# Returns
-- `(success::Bool, rows_processed::Int)`: Processing status and row count
-
-# Example
-```julia
-using DuckDB
-conn = DBInterface.connect(DuckDB.DB)
-eurostat_path = "data/010_eurostat_tables"
-success, rows = create_business_demographic_a64_data(eurostat_path, conn)
-```
-"""
-function create_business_demographic_a64_data(table_id::String,
-    eurostat_path::String, conn;
-    excluded_industries::Vector{String} = ["L68A", "T", "U"])
-
-    # Input validation
+## Paths of the NACE64 mapping, the input and the output table; throws if one
+## of the input files is missing
+function _a64_files(table_id::String, eurostat_path::String)
     nace64_file = joinpath(eurostat_path, "nace64.parquet")
     input_file = joinpath(eurostat_path, "$(table_id).parquet")
     output_file = joinpath(eurostat_path, "$(table_id)_a64.parquet")
@@ -60,46 +21,12 @@ function create_business_demographic_a64_data(table_id::String,
         throw(ArgumentError("Input file not found: $input_file"))
     end
 
-    sbs_indicator_column = "indic_sbs"
-    if table_id == "bd_9ac_l_form_r2"
-        sbs_indicator_column = "indic_sb"
-    end
+    return nace64_file, input_file, output_file
+end
 
+## Execute the `COPY ... TO output_file` query; returns (success, rows written)
+function _write_a64_table(conn, sqlquery::String, output_file::String)
     try
-        # Build the SQL query
-        sqlquery = """
-        COPY (WITH sbs AS (
-            WITH nace64 AS (SELECT * FROM '$nace64_file')
-            SELECT nace, geo, $sbs_indicator_column, leg_form, time, sum(value) AS value
-            FROM '$input_file'
-            JOIN nace64 ON nace_r2::text ~ nace64.regex
-            WHERE nace_r2 NOT IN (SELECT nace FROM nace64)
-              AND nace NOT IN (SELECT nace_r2 FROM '$input_file')
-              AND nace_r2 !~ '^([A-Z][0-9][0-9][0-9])'
-            GROUP BY nace, geo, $sbs_indicator_column, leg_form, time
-            UNION
-            SELECT nace, geo, $sbs_indicator_column, leg_form, time, value
-            FROM '$input_file'
-            JOIN nace64 ON nace_r2=nace64.nace
-        ), foo AS (
-            WITH sbs_geo AS (SELECT DISTINCT geo FROM '$input_file'),
-                 sbs_indic AS (SELECT DISTINCT $sbs_indicator_column FROM '$input_file'),
-                 sbs_leg AS (SELECT DISTINCT leg_form FROM '$input_file'),
-                 sbs_time AS (SELECT DISTINCT time FROM '$input_file'),
-                 nace64 AS (SELECT * FROM '$nace64_file')
-            SELECT nace64.nace, sbs_geo.geo, sbs_indic.$sbs_indicator_column, sbs_leg.leg_form, sbs_time.time
-            FROM nace64, sbs_geo, sbs_indic, sbs_leg, sbs_time
-        )
-        SELECT foo.$sbs_indicator_column, foo.leg_form, foo.nace AS nace_r2, foo.geo, foo.time, value
-        FROM foo
-        LEFT JOIN sbs ON foo.nace=sbs.nace AND foo.geo=sbs.geo AND foo.$sbs_indicator_column=sbs.$sbs_indicator_column
-                      AND foo.leg_form=sbs.leg_form AND foo.time=sbs.time
-        WHERE foo.nace NOT IN ($(join("'" .* excluded_industries .* "'", ",")))
-        ORDER BY foo.nace
-        ) TO '$output_file' (FORMAT parquet);
-        """
-
-        # Execute the query
         DBInterface.execute(conn, sqlquery)
 
         # Count output rows for verification
@@ -118,28 +45,30 @@ function create_business_demographic_a64_data(table_id::String,
 end
 
 """
-    create_enterprise_statistics_a64_data(eurostat_path::String, conn;
-                          excluded_industries::Vector{String} = ["L68A", "T", "U"])
+    create_business_demographic_a64_data(table_id::String, eurostat_path::String, conn;
+                            excluded_industries::Vector{String} = ["L68A", "T", "U"])
 
-Convert structural business statistics data from NACE Rev.2 to NACE64 classification.
+Convert business demography data from NACE Rev.2 to NACE64 classification.
 
-Creates `sbs_na_sca_a64.parquet` from `sbs_na_sca_r2.parquet` by:
+Creates `{table_id}_a64.parquet` from `{table_id}.parquet` (e.g.
+`bd_9ac_l_form_r2` or `bd_l_form`) by:
 1. Mapping NACE Rev.2 codes to NACE64 using regex patterns
 2. Aggregating values where multiple Rev.2 codes map to one NACE64 code
-3. Creating complete dimensional grid (industry×geo×indicator×time)
+3. Creating complete dimensional grid (industry×geo×indicator×legal_form×time)
 4. Filling gaps with NULL values for missing combinations
 
 # Arguments
+- `table_id::String`: Eurostat table id of the input table
 - `eurostat_path::String`: Directory containing input/output Parquet files
 - `conn`: DuckDB database connection
 - `excluded_industries::Vector{String}`: NACE64 industries to exclude from output
 
 # Files Required
-- `$(eurostat_path)/nace64.parquet`: Industry classification mapping table
-- `$(eurostat_path)/sbs_na_sca_r2.parquet`: Input structural business statistics data
+- `{eurostat_path}/nace64.parquet`: Industry classification mapping table
+- `{eurostat_path}/{table_id}.parquet`: Input business demography data
 
 # Files Created
-- `$(eurostat_path)/sbs_na_sca_a64.parquet`: Output data in NACE64 format
+- `{eurostat_path}/{table_id}_a64.parquet`: Output data in NACE64 format
 
 # Returns
 - `(success::Bool, rows_processed::Int)`: Processing status and row count
@@ -149,77 +78,125 @@ Creates `sbs_na_sca_a64.parquet` from `sbs_na_sca_r2.parquet` by:
 using DuckDB
 conn = DBInterface.connect(DuckDB.DB)
 eurostat_path = "data/010_eurostat_tables"
-success, rows = create_enterprise_statistics_a64_data(eurostat_path, conn)
+success, rows = create_business_demographic_a64_data("bd_9ac_l_form_r2", eurostat_path, conn)
+```
+"""
+function create_business_demographic_a64_data(table_id::String,
+    eurostat_path::String, conn;
+    excluded_industries::Vector{String} = EXCLUDED_NACE64)
+
+    nace64_file, input_file, output_file = _a64_files(table_id, eurostat_path)
+    sbs_indicator_column = table_id == "bd_9ac_l_form_r2" ? "indic_sb" : "indic_sbs"
+
+    sqlquery = """
+    COPY (WITH sbs AS (
+        WITH nace64 AS (SELECT * FROM '$nace64_file')
+        SELECT nace, geo, $sbs_indicator_column, leg_form, time, sum(value) AS value
+        FROM '$input_file'
+        JOIN nace64 ON nace_r2::text ~ nace64.regex
+        WHERE nace_r2 NOT IN (SELECT nace FROM nace64)
+          AND nace NOT IN (SELECT nace_r2 FROM '$input_file')
+          AND nace_r2 !~ '^([A-Z][0-9][0-9][0-9])'
+        GROUP BY nace, geo, $sbs_indicator_column, leg_form, time
+        UNION
+        SELECT nace, geo, $sbs_indicator_column, leg_form, time, value
+        FROM '$input_file'
+        JOIN nace64 ON nace_r2=nace64.nace
+    ), foo AS (
+        WITH sbs_geo AS (SELECT DISTINCT geo FROM '$input_file'),
+             sbs_indic AS (SELECT DISTINCT $sbs_indicator_column FROM '$input_file'),
+             sbs_leg AS (SELECT DISTINCT leg_form FROM '$input_file'),
+             sbs_time AS (SELECT DISTINCT time FROM '$input_file'),
+             nace64 AS (SELECT * FROM '$nace64_file')
+        SELECT nace64.nace, sbs_geo.geo, sbs_indic.$sbs_indicator_column, sbs_leg.leg_form, sbs_time.time
+        FROM nace64, sbs_geo, sbs_indic, sbs_leg, sbs_time
+    )
+    SELECT foo.$sbs_indicator_column, foo.leg_form, foo.nace AS nace_r2, foo.geo, foo.time, value
+    FROM foo
+    LEFT JOIN sbs ON foo.nace=sbs.nace AND foo.geo=sbs.geo AND foo.$sbs_indicator_column=sbs.$sbs_indicator_column
+                  AND foo.leg_form=sbs.leg_form AND foo.time=sbs.time
+    WHERE foo.nace NOT IN ($(join("'" .* excluded_industries .* "'", ",")))
+    ORDER BY foo.nace
+    ) TO '$output_file' (FORMAT parquet);
+    """
+
+    return _write_a64_table(conn, sqlquery, output_file)
+end
+
+"""
+    create_enterprise_statistics_a64_data(table_id::String, eurostat_path::String, conn;
+                          excluded_industries::Vector{String} = ["L68A", "T", "U"])
+
+Convert structural business statistics data from NACE Rev.2 to NACE64 classification.
+
+Creates `{table_id}_a64.parquet` from `{table_id}.parquet` (e.g.
+`sbs_na_sca_r2` or `sbs_ovw_act`) by:
+1. Mapping NACE Rev.2 codes to NACE64 using regex patterns
+2. Aggregating values where multiple Rev.2 codes map to one NACE64 code
+3. Creating complete dimensional grid (industry×geo×indicator×time)
+4. Filling gaps with NULL values for missing combinations
+
+# Arguments
+- `table_id::String`: Eurostat table id of the input table
+- `eurostat_path::String`: Directory containing input/output Parquet files
+- `conn`: DuckDB database connection
+- `excluded_industries::Vector{String}`: NACE64 industries to exclude from output
+
+# Files Required
+- `{eurostat_path}/nace64.parquet`: Industry classification mapping table
+- `{eurostat_path}/{table_id}.parquet`: Input structural business statistics data
+
+# Files Created
+- `{eurostat_path}/{table_id}_a64.parquet`: Output data in NACE64 format
+
+# Returns
+- `(success::Bool, rows_processed::Int)`: Processing status and row count
+
+# Example
+```julia
+using DuckDB
+conn = DBInterface.connect(DuckDB.DB)
+eurostat_path = "data/010_eurostat_tables"
+success, rows = create_enterprise_statistics_a64_data("sbs_na_sca_r2", eurostat_path, conn)
 ```
 """
 function create_enterprise_statistics_a64_data(table_id::String, eurostat_path::String, conn;
-    excluded_industries::Vector{String} = ["L68A", "T", "U"])
+    excluded_industries::Vector{String} = EXCLUDED_NACE64)
 
-    # Input validation
-    nace64_file = joinpath(eurostat_path, "nace64.parquet")
-    input_file = joinpath(eurostat_path, "$(table_id).parquet")
-    output_file = joinpath(eurostat_path, "$(table_id)_a64.parquet")
+    nace64_file, input_file, output_file = _a64_files(table_id, eurostat_path)
+    sbs_indicator_column = table_id == "sbs_na_sca_r2" ? "indic_sb" : "indic_sbs"
 
-    if !isfile(nace64_file)
-        throw(ArgumentError("NACE64 mapping file not found: $nace64_file"))
-    end
+    # Note: no leg_form dimension, different exclusions
+    sqlquery = """
+    COPY (WITH sbs AS (
+        WITH nace64 AS (SELECT * FROM '$nace64_file')
+        SELECT nace, geo, $sbs_indicator_column, time, sum(value) AS value
+        FROM '$input_file'
+        JOIN nace64 ON nace_r2::text ~ nace64.regex
+        WHERE nace_r2 NOT IN (SELECT nace FROM nace64)
+          AND nace NOT IN (SELECT nace_r2 FROM '$input_file')
+          AND nace NOT IN ('O','P','Q','T','U')
+        GROUP BY nace, geo, $sbs_indicator_column, time
+        UNION
+        SELECT nace, geo, $sbs_indicator_column, time, value
+        FROM '$input_file'
+        JOIN nace64 ON nace_r2=nace64.nace
+    ), foo AS (
+        WITH sbs_geo AS (SELECT DISTINCT geo FROM '$input_file'),
+             sbs_indic AS (SELECT DISTINCT $sbs_indicator_column FROM '$input_file'),
+             sbs_time AS (SELECT DISTINCT time FROM '$input_file'),
+             nace64 AS (SELECT * FROM '$nace64_file')
+        SELECT nace64.nace, sbs_geo.geo, sbs_indic.$sbs_indicator_column, sbs_time.time
+        FROM nace64, sbs_geo, sbs_indic, sbs_time
+    )
+    SELECT foo.nace AS nace_r2, foo.geo, foo.$sbs_indicator_column, foo.time, value
+    FROM foo
+    LEFT JOIN sbs ON foo.nace=sbs.nace AND foo.geo=sbs.geo AND foo.$sbs_indicator_column=sbs.$sbs_indicator_column
+                  AND foo.time=sbs.time
+    WHERE foo.nace NOT IN ($(join("'" .* excluded_industries .* "'", ",")))
+    ORDER BY foo.nace
+    ) TO '$output_file' (FORMAT parquet);
+    """
 
-    if !isfile(input_file)
-        throw(ArgumentError("Input file not found: $input_file"))
-    end
-
-    sbs_indicator_column = "indic_sbs"
-    if table_id == "sbs_na_sca_r2"
-        sbs_indicator_column = "indic_sb"
-    end
-
-    try
-        # Build the SQL query (note: no leg_form dimension, different exclusions)
-        sqlquery = """
-        COPY (WITH sbs AS (
-            WITH nace64 AS (SELECT * FROM '$nace64_file')
-            SELECT nace, geo, $sbs_indicator_column, time, sum(value) AS value
-            FROM '$input_file'
-            JOIN nace64 ON nace_r2::text ~ nace64.regex
-            WHERE nace_r2 NOT IN (SELECT nace FROM nace64)
-              AND nace NOT IN (SELECT nace_r2 FROM '$input_file')
-              AND nace NOT IN ('O','P','Q','T','U')
-            GROUP BY nace, geo, $sbs_indicator_column, time
-            UNION
-            SELECT nace, geo, $sbs_indicator_column, time, value
-            FROM '$input_file'
-            JOIN nace64 ON nace_r2=nace64.nace
-        ), foo AS (
-            WITH sbs_geo AS (SELECT DISTINCT geo FROM '$input_file'),
-                 sbs_indic AS (SELECT DISTINCT $sbs_indicator_column FROM '$input_file'),
-                 sbs_time AS (SELECT DISTINCT time FROM '$input_file'),
-                 nace64 AS (SELECT * FROM '$nace64_file')
-            SELECT nace64.nace, sbs_geo.geo, sbs_indic.$sbs_indicator_column, sbs_time.time
-            FROM nace64, sbs_geo, sbs_indic, sbs_time
-        )
-        SELECT foo.nace AS nace_r2, foo.geo, foo.$sbs_indicator_column, foo.time, value
-        FROM foo
-        LEFT JOIN sbs ON foo.nace=sbs.nace AND foo.geo=sbs.geo AND foo.$sbs_indicator_column=sbs.$sbs_indicator_column
-                      AND foo.time=sbs.time
-        WHERE foo.nace NOT IN ($(join("'" .* excluded_industries .* "'", ",")))
-        ORDER BY foo.nace
-        ) TO '$output_file' (FORMAT parquet);
-        """
-
-        # Execute the query
-        DBInterface.execute(conn, sqlquery)
-
-        # Count output rows for verification
-        count_query = "SELECT COUNT(*) as count FROM '$output_file'"
-        result = DBInterface.execute(conn, count_query)
-        rows_processed = first(result).count
-
-        @info "Successfully created $(output_file)" rows_processed
-
-        return (true, rows_processed)
-
-    catch e
-        @error "Failed to create $(output_file)" error=e
-        return (false, 0)
-    end
+    return _write_a64_table(conn, sqlquery, output_file)
 end

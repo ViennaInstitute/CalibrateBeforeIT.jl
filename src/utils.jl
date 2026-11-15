@@ -1,10 +1,3 @@
-# module Utils
-# export pqfile, execute
-# using DuckDB, Tables
-
-using Interpolations
-using Dates
-
 # Constants for date conversion
 const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24
 
@@ -31,6 +24,13 @@ function execute(conn, query::String, dims::Tuple{Vararg{Int}})::Array
     return res
 end
 
+# Query the `value` column of a Eurostat table for one geo and the periods in
+# `times_str`; `filters` are additional SQL conditions
+function query_values(conn, table_id::String, geo, times_str::String, filters::String;
+                      order::String = "time")::Vector
+    execute(conn, "SELECT value FROM '$(pqfile(table_id))' WHERE time IN ($(times_str)) AND geo='$(geo)' AND $(filters) ORDER BY $(order)")
+end
+
 # Database query utilities -- debug version
 function execute_debug(conn, query::String)::DataFrame
     # Execute SQL query and return a DataFrame
@@ -38,26 +38,29 @@ function execute_debug(conn, query::String)::DataFrame
     return res
 end
 
-function extract_years(conn, table_id::String, start_calibration_year::Int64, end_calibration_year::Int64)::Vector{Int64}
+function extract_years(conn, table_id::String,
+                       start_year::Int64 = typemin(Int64),
+                       end_year::Int64 = typemax(Int64))::Vector{Int64}
     sqlquery = "SELECT DISTINCT time FROM '$(pqfile(table_id))' ORDER BY time"
     res_years = try
         parse.(Int64, execute(conn, sqlquery))
     catch e
         error("Failed to parse years from the database: $e")
     end
-    filter!(x -> x >= start_calibration_year && x <= end_calibration_year, res_years)
+    filter!(x -> x >= start_year && x <= end_year, res_years)
     return res_years
 end
 
-function extract_years(conn, table_id::String, start_calibration_year::Int64)::Vector{Int64}
-    extract_years(conn, table_id, start_calibration_year, typemax(Int64))
-end
+# NACE64 industries that are not part of the model
+const EXCLUDED_NACE64 = ["L68A", "T", "U"]
 
-function extract_years(conn, table_id::String)::Vector{Int64}
-    extract_years(conn, table_id, typemin(Int64), typemax(Int64))
-end
+# Quoted, comma-separated list for SQL `IN (...)` clauses
+sql_list(items)::String = join(["'$(item)'" for item in items], ", ")
 
-create_year_array_str(all_years::Vector)::String = join(["'$(year)'" for year in all_years], ", ")
+# SQL lists of the years and of the year-quarters ("2010-Q1") in `years`, as
+# found in the `time` column of annual and quarterly Eurostat tables
+sql_years_quarters(years::UnitRange{Int64}) =
+    (sql_list(years), sql_list(["$(year)-Q$(quarter)" for year in years for quarter in 1:4]))
 
 # Interpolation utilities
 function linear_interp_extrap(x, y, xi)::Vector
@@ -77,5 +80,3 @@ date2num_quarterly(years_range::UnitRange{Int64})::Vector{Int64} = reduce(vcat, 
 # Convert MATLAB date number back to DateTime
 num2date(n::Number)::Dates.DateTime = MATLAB_EPOCH + Dates.Millisecond(round(Int64, n * MILLISECONDS_PER_DAY))
 
-
-# end
