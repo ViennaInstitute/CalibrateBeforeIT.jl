@@ -44,6 +44,14 @@ max_calibration_date = CBit.DateTime(2023, 12, 31)
 estimation_date = CBit.DateTime(1996, 12, 31)
 number_sectors = 62;
 
+## Initial accounting-identity gate: refuse to save bundles whose model breaks
+## the initial accounting identities (see CBit.get_initial_accounting_identities),
+## so defective quarters surface at generation time instead of breaking the
+## simulations later. The bound matches the model suite's test bound; observed
+## rounding residuals are below 1e-8.
+identity_tol = 1.0e-7
+identity_violations = NamedTuple[]
+
 # ## all countries:
 all_countries = ["AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES", "FI", "FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT", "NL", "PL", "PT", "RO", "SE", "SI", "SK"]
 # all_countries = ["LU", "MT"]
@@ -118,10 +126,29 @@ for geo in all_countries
                     Bit.get_params_and_initial_conditions(calibration_object,
                         calibration_date; scale = model_scale);
 
-                ## Save the parameters and initial conditions
-                jldsave("$(CBit.calibration_output_path)/scale=$(model_scale)/$(geo)/$(calibration_year)Q$(calibration_quarter)_parameters_initial_conditions.jld2";
-                    parameters = parameters,
-                    initial_conditions = initial_conditions)
+                ## Gate: a bundle that breaks the initial accounting identities
+                ## is not saved (nor is one whose model cannot be constructed,
+                ## which the catch below reports).
+                income_prod, exp_nominal, exp_real =
+                    CBit.get_initial_accounting_identities(parameters, initial_conditions)
+                if maximum(abs, (income_prod, exp_nominal, exp_real)) > identity_tol
+                    push!(identity_violations, (
+                        country = geo,
+                        quarter = "$(calibration_year)Q$(calibration_quarter)",
+                        scale = model_scale,
+                        income_prod = income_prod,
+                        exp_nominal = exp_nominal,
+                        exp_real = exp_real,
+                    ))
+                    @warn "  Identity violation, not saving $(geo) $(calibration_year)Q$(calibration_quarter) (scale = $(model_scale)): " *
+                        "residuals (income-production, expenditure nominal, expenditure real) = " *
+                        "($(income_prod), $(exp_nominal), $(exp_real))"
+                else
+                    ## Save the parameters and initial conditions
+                    jldsave("$(CBit.calibration_output_path)/scale=$(model_scale)/$(geo)/$(calibration_year)Q$(calibration_quarter)_parameters_initial_conditions.jld2";
+                        parameters = parameters,
+                        initial_conditions = initial_conditions)
+                end
             catch e
                 @warn "  Skipping $(geo) $(calibration_year)Q$(calibration_quarter): $e"
             end
@@ -130,3 +157,14 @@ for geo in all_countries
 end
 
 @info "=> Finished creating the calibration objects!"
+
+if !isempty(identity_violations)
+    @warn "Bundles with initial accounting-identity violations were NOT saved " *
+        "($(length(identity_violations)) country-quarter-scale combinations):"
+    for v in identity_violations
+        @warn "  $(v.country) $(v.quarter) (scale = $(v.scale)): " *
+            "residuals (income-production, expenditure nominal, expenditure real) = " *
+            "($(v.income_prod), $(v.exp_nominal), $(v.exp_real))"
+    end
+    exit(1)
+end

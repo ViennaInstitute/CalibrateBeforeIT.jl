@@ -25,6 +25,10 @@ using Test
         include("test_params_and_initial_conditions.jl")
     end
 
+    @testset "Initial Identity Tests" begin
+        include("test_initial_identities.jl")
+    end
+
     # Parameter and Initial Condition Constraint Tests
     # These tests validate that calibrated data satisfies economic and mathematical constraints
     # required for stable BeforeIT.jl model execution
